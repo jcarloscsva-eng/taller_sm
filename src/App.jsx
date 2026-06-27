@@ -467,7 +467,7 @@ const MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","
 const fmtFecha=d=>`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
 const fmtFechaCorta=d=>`${d.getDate()}/${d.getMonth()+1}`;
 const clavesDia=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-const hoy=new Date(2026,5,27); // Sabado 27 junio 2026
+const hoy=new Date(); hoy.setHours(0,0,0,0); // fecha real de hoy
 
 // Citas de ejemplo para otros dias de la semana (datos ficticios)
 const EXTRA_CITAS=[
@@ -486,10 +486,10 @@ const EXTRA_CITAS=[
   {id:113,fecha:"2026-06-30",hora:"14:00",cliente:"Nuria Vega",vehiculo:"Citroen C3",matricula:"5566KLM",servicio:"Cambio neumaticos",estado:"confirmada",tel:"688333555",rec:"no_enviado"},
 ];
 
-function TarjetaCita({c,onCambiar,onRecordar}){
+function TarjetaCita({c,onCambiar,onRecordar,onClick}){
   const e=EST[c.estado]||EST.confirmada;
   return(
-    <div style={{background:C.carbono,border:`1px solid ${c.estado==="en_taller"?C.acento+"55":c.estado==="esperando_pieza"?C.morado+"55":C.borde}`,borderRadius:10,padding:"11px 14px",display:"flex",alignItems:"center",gap:11,flexWrap:"wrap"}}>
+    <div onClick={onClick} style={{background:C.carbono,border:`1px solid ${c.estado==="en_taller"?C.acento+"55":c.estado==="esperando_pieza"?C.morado+"55":C.borde}`,borderRadius:10,padding:"11px 14px",display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",cursor:onClick?"pointer":"default"}}>
       <div style={{width:44,textAlign:"center",flexShrink:0}}>
         <div style={{fontSize:13,fontWeight:800,color:C.acento,fontFamily:"monospace"}}>{c.hora}</div>
       </div>
@@ -520,11 +520,12 @@ function TarjetaCita({c,onCambiar,onRecordar}){
 }
 
 function Agenda({citas,set,clientes}){
-  const [vista,setVista]  =useState("dia");   // "dia" | "semana" | "mes"
-  const [offset,setOffset]=useState(0);        // dias/semanas/meses de desplazamiento
-  const [dlg,setDlg]      =useState(false);
-  const [n,setN]          =useState({hora:"",cliente:"",vehiculo:"",matricula:"",servicio:"",tel:"",fecha:""});
-  const [toast,setToast]  =useState(null);
+  const [vista,setVista]    =useState("dia");
+  const [offset,setOffset]  =useState(0);
+  const [dlg,setDlg]        =useState(false);
+  const [citaDet,setCitaDet]=useState(null); // cita abierta en detalle
+  const [n,setN]            =useState({hora:"",cliente:"",vehiculo:"",matricula:"",servicio:"",tel:"",fecha:""});
+  const [toast,setToast]    =useState(null);
 
   // Combina citas reales (sin fecha = hoy) con las de ejemplo para otros dias
   const todasCitas=[
@@ -616,7 +617,7 @@ function Agenda({citas,set,clientes}){
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {citasRango.length===0&&<div style={{color:C.textoSuave,fontSize:13,textAlign:"center",padding:"40px 0"}}>Sin citas este dia</div>}
           {[...citasRango].sort((a,b)=>a.hora.localeCompare(b.hora)).map(c=>(
-            <TarjetaCita key={c.id} c={c} onCambiar={cambiar} onRecordar={recordar}/>
+            <TarjetaCita key={c.id} c={c} onCambiar={cambiar} onRecordar={recordar} onClick={()=>setCitaDet(c)}/>
           ))}
         </div>
       )}
@@ -642,7 +643,7 @@ function Agenda({citas,set,clientes}){
                   {citasDia.map(c=>{
                     const e=EST[c.estado]||EST.confirmada;
                     return(
-                      <div key={c.id} style={{background:e.bg,border:`1px solid ${e.col}40`,borderRadius:6,padding:"4px 6px",marginBottom:4}}>
+                      <div key={c.id} onClick={()=>setCitaDet(c)} style={{background:e.bg,border:`1px solid ${e.col}40`,borderRadius:6,padding:"4px 6px",marginBottom:4,cursor:"pointer"}}>
                         <div style={{color:e.col,fontSize:10,fontWeight:700}}>{c.hora}</div>
                         <div style={{color:C.texto,fontSize:10,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.cliente}</div>
                         <div style={{color:C.textoSuave,fontSize:9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.servicio}</div>
@@ -681,7 +682,7 @@ function Agenda({citas,set,clientes}){
                 const citasDia=todasCitas.filter(c=>c.fecha===clave);
                 const esHoy=clave===clavesDia(hoy);
                 return(
-                  <div key={clave} onClick={()=>{setVista("dia");const d=new Date(hoy);const diff2=new Date(clave)-new Date(clavesDia(hoy));setOffset(Math.round(diff2/(1000*60*60*24)));}}
+                  <div key={clave} onClick={()=>{setVista("dia");const diff2=new Date(clave)-new Date(clavesDia(hoy));setOffset(Math.round(diff2/(1000*60*60*24)));}}
                     style={{background:esHoy?C.acento+"22":C.carbono,border:`1px solid ${esHoy?C.acento+"60":citasDia.length>0?C.borde+"88":C.borde+"33"}`,borderRadius:8,padding:"6px 4px",minHeight:64,cursor:"pointer",opacity:citasDia.length===0?0.5:1}}>
                     <div style={{textAlign:"center",marginBottom:4}}>
                       <span style={{fontSize:12,fontWeight:700,color:esHoy?C.acento:C.texto}}>{dia}</span>
@@ -689,7 +690,7 @@ function Agenda({citas,set,clientes}){
                     {citasDia.slice(0,2).map(c=>{
                       const e=EST[c.estado]||EST.confirmada;
                       return(
-                        <div key={c.id} style={{background:e.col+"22",borderLeft:`2px solid ${e.col}`,borderRadius:3,padding:"2px 4px",marginBottom:2}}>
+                        <div key={c.id} onClick={e=>{e.stopPropagation();setCitaDet(c);}} style={{background:e.col+"22",borderLeft:`2px solid ${e.col}`,borderRadius:3,padding:"2px 4px",marginBottom:2,cursor:"pointer"}}>
                           <div style={{color:e.col,fontSize:9,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.hora} {c.cliente.split(" ")[0]}</div>
                         </div>
                       );
@@ -703,7 +704,50 @@ function Agenda({citas,set,clientes}){
         );
       })()}
 
-      {/* MODAL NUEVA CITA */}
+      {/* MODAL DETALLE CITA */}
+      {citaDet&&(
+        <Dlg title="Detalle de cita" onClose={()=>setCitaDet(null)} w={460}>
+          {/* Cabecera */}
+          <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:18,paddingBottom:14,borderBottom:`1px solid ${C.borde}`}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:17,fontWeight:800,color:C.texto}}>{citaDet.cliente}</div>
+              <div style={{color:C.textoSuave,fontSize:12,marginTop:3}}>{citaDet.vehiculo} · <span style={{fontFamily:"monospace"}}>{citaDet.matricula}</span></div>
+              {citaDet.tel&&<div style={{color:C.textoSuave,fontSize:12,marginTop:2}}>📞 {citaDet.tel}</div>}
+            </div>
+            <a href={`tel:${citaDet.tel}`} style={{background:C.verdeClaro,border:`1px solid ${C.verde}40`,color:C.verde,borderRadius:7,padding:"6px 12px",fontSize:12,fontWeight:700,textDecoration:"none"}}>Llamar</a>
+          </div>
+          {/* Info */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+            <div style={{background:C.plomo,borderRadius:8,padding:"10px 13px"}}>
+              <div style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase",marginBottom:3}}>Fecha y hora</div>
+              <div style={{color:C.acento,fontFamily:"monospace",fontWeight:800,fontSize:15}}>{citaDet.hora}</div>
+              <div style={{color:C.textoSuave,fontSize:11,marginTop:2}}>{citaDet.fecha||"Hoy"}</div>
+            </div>
+            <div style={{background:C.plomo,borderRadius:8,padding:"10px 13px"}}>
+              <div style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase",marginBottom:3}}>Estado</div>
+              {(()=>{const e=EST[citaDet.estado]||EST.confirmada;return <Bdg color={e.col} bg={e.bg} txt={e.txt}/>;})()}
+            </div>
+          </div>
+          <div style={{background:C.plomo,borderRadius:8,padding:"11px 13px",marginBottom:16}}>
+            <div style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>Servicio</div>
+            <div style={{color:C.texto,fontSize:13,fontWeight:600}}>{citaDet.servicio}</div>
+          </div>
+          {/* Cambiar estado */}
+          <div style={{marginBottom:8}}>
+            <div style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Cambiar estado</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {Object.entries(EST).map(([k,e])=>(
+                <button key={k} onClick={()=>{cambiar(citaDet.id,k);setCitaDet({...citaDet,estado:k});}}
+                  style={{background:citaDet.estado===k?e.bg:C.plomo,color:citaDet.estado===k?e.col:C.textoSuave,border:`1px solid ${citaDet.estado===k?e.col+"60":C.borde}`,borderRadius:7,padding:"6px 10px",fontSize:11,fontWeight:citaDet.estado===k?700:400,cursor:"pointer"}}>
+                  {e.txt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Dlg>
+      )}
+
+      {/* MODAL NUEVA CITA */}}
       {dlg&&<Dlg title="Nueva cita" onClose={()=>setDlg(false)} w={420}>
         <Inp label="Fecha" val={n.fecha} set={v=>setN({...n,fecha:v})} ph="2026-06-27 (AAAA-MM-DD)"/>
         <TimePicker value={n.hora} onChange={v=>setN({...n,hora:v})}/>
