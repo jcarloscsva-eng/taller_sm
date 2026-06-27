@@ -1,4 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import jsPDF from "jspdf";
+import { db } from "./firebase";
+import {
+  collection, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot
+} from "firebase/firestore";
 
 const C = {
   negro:"#0F0F0F",carbono:"#1A1A1A",plomo:"#2A2A2A",
@@ -479,222 +484,344 @@ function Clientes({clientes,setClientes}){
   );
 }
 
-// ── ALBARANES (con dto por linea) ─────────────────────────────────────────────
+// ── ALBARANES ────────────────────────────────────────────────────────────────
 function Albaranes({albs,setAlbs,setFacts,setTab}){
-  const [dlg,setDlg]=useState(false);
-  const [open,setOpen]=useState(null);
-  const [motivo,setMotivo]=useState("");
+  const [dlgNuevo,setDlgNuevo]=useState(false);
+  const [open,setOpen]        =useState(null);
+  const [editMode,setEditMode]=useState(false);
+  const [motivo,setMotivo]    =useState("");
   const [rechazando,setRechazando]=useState(false);
+
+  // form nuevo albaran
   const [form,setForm]=useState({cliente:"",veh:"",mat:"",mec:"Paco",nota:"",dtoGlobal:""});
   const [lineas,setLineas]=useState([{id:1,desc:"",tipo:"pieza",precio:"",qty:1,dto:0}]);
-  const addL=()=>setLineas([...lineas,{id:Date.now(),desc:"",tipo:"pieza",precio:"",qty:1,dto:0}]);
-  const updL=(id,k,v)=>setLineas(lineas.map(l=>l.id===id?{...l,[k]:v}:l));
-  const delL=id=>setLineas(lineas.filter(l=>l.id!==id));
+  const addL  =()=>setLineas(prev=>[...prev,{id:Date.now(),desc:"",tipo:"pieza",precio:"",qty:1,dto:0}]);
+  const updL  =(id,k,v)=>setLineas(prev=>prev.map(l=>l.id===id?{...l,[k]:v}:l));
+  const delL  =id=>setLineas(prev=>prev.filter(l=>l.id!==id));
+
+  // form editar albaran existente
+  const [eLineas,setELineas]      =useState([]);
+  const [eDtoGlobal,setEDtoGlobal]=useState(0);
+  const [eNota,setENota]          =useState("");
+  const addEL=()=>setELineas(prev=>[...prev,{id:Date.now(),desc:"",tipo:"pieza",precio:0,qty:1,dto:0}]);
+  const updEL=(id,k,v)=>setELineas(prev=>prev.map(l=>l.id===id?{...l,[k]:v}:l));
+  const delEL=id=>setELineas(prev=>prev.filter(l=>l.id!==id));
+
+  const abrirEdicion=a=>{
+    setELineas(a.lineas.map(l=>({...l})));
+    setEDtoGlobal(a.dtoGlobal||0);
+    setENota(a.nota||"");
+    setEditMode(true);
+  };
+
+  const guardarEdicion=id=>{
+    setAlbs(prev=>prev.map(a=>a.id!==id?a:{...a,
+      lineas:eLineas.map(l=>({...l,precio:parseFloat(l.precio)||0,qty:parseInt(l.qty)||1,dto:parseFloat(l.dto)||0})),
+      dtoGlobal:parseFloat(eDtoGlobal)||0,nota:eNota,
+    }));
+    setEditMode(false);
+  };
+
   const guardar=()=>{
     if(!form.cliente)return;
-    setAlbs([{id:`ALB-${String(albs.length+3).padStart(3,"0")}`,cliente:form.cliente,veh:form.veh,mat:form.mat,mec:form.mec,nota:form.nota,fecha:"ahora",estado:"pendiente",dtoGlobal:parseFloat(form.dtoGlobal)||0,
-      lineas:lineas.map(l=>({...l,precio:parseFloat(l.precio)||0,qty:parseInt(l.qty)||1,dto:parseFloat(l.dto)||0}))}, ...albs]);
-    setForm({cliente:"",veh:"",mat:"",mec:"Paco",nota:"",dtoGlobal:""});setLineas([{id:1,desc:"",tipo:"pieza",precio:"",qty:1,dto:0}]);setDlg(false);
+    setAlbs(prev=>[{
+      id:`ALB-${String(prev.length+3).padStart(3,"0")}`,
+      cliente:form.cliente,veh:form.veh,mat:form.mat,mec:form.mec,
+      nota:form.nota,fecha:"ahora",estado:"pendiente",
+      dtoGlobal:parseFloat(form.dtoGlobal)||0,
+      lineas:lineas.map(l=>({...l,precio:parseFloat(l.precio)||0,qty:parseInt(l.qty)||1,dto:parseFloat(l.dto)||0})),
+    },...prev]);
+    setForm({cliente:"",veh:"",mat:"",mec:"Paco",nota:"",dtoGlobal:""});
+    setLineas([{id:1,desc:"",tipo:"pieza",precio:"",qty:1,dto:0}]);
+    setDlgNuevo(false);
   };
+
   const aprobar=a=>{
     const num=`F-2024-${String(90+albs.filter(x=>x.estado==="aprobado").length+1).padStart(3,"0")}`;
-    const dtoG=parseFloat(a.dtoGlobal)||0;
-    // Build factura lines: each line price already has per-line dto baked in
-    // then we apply global dto proportionally across lines
-    const factor=1-dtoG/100;
+    const factor=1-(parseFloat(a.dtoGlobal)||0)/100;
     setFacts(prev=>[{id:num,cliente:a.cliente,
       servicios:a.lineas.map((l,i)=>({id:i+1,desc:l.desc+(l.qty>1?` x${l.qty}`:""),precio:parseFloat((lineaNeta(l)*factor).toFixed(2))})),
       estado:"pendiente",aviso:false},...prev]);
     setAlbs(prev=>prev.map(x=>x.id===a.id?{...x,estado:"aprobado",fid:num}:x));
     setOpen(null);setTimeout(()=>setTab("facturas"),400);
   };
-  const rechazar=id=>{setAlbs(prev=>prev.map(a=>a.id===id?{...a,estado:"rechazado",motivo}:a));setMotivo("");setRechazando(false);setOpen(null);};
+
+  const rechazar=id=>{
+    setAlbs(prev=>prev.map(a=>a.id===id?{...a,estado:"rechazado",motivo}:a));
+    setMotivo("");setRechazando(false);setOpen(null);
+  };
+
   const pend=albs.filter(a=>a.estado==="pendiente");
-  const det=albs.find(a=>a.id===open);
-  const EC={pendiente:{txt:"Pendiente aprobacion",col:C.amarillo,bg:C.amarilloClaro},aprobado:{txt:"Aprobado - Facturado",col:C.verde,bg:C.verdeClaro},rechazado:{txt:"Rechazado",col:C.rojo,bg:C.rojoClaro}};
+  const det =albs.find(a=>a.id===open);
+  const EC={
+    pendiente:{txt:"Pendiente aprobacion",col:C.amarillo,bg:C.amarilloClaro},
+    aprobado: {txt:"Aprobado - Facturado",col:C.verde,   bg:C.verdeClaro},
+    rechazado:{txt:"Rechazado",           col:C.rojo,    bg:C.rojoClaro},
+  };
+
+  // Resumen de totales reutilizable
+  const Resumen=({ls,dtoG})=>{
+    const ls2=ls.map(l=>({...l,precio:parseFloat(l.precio)||0,qty:parseInt(l.qty)||1,dto:parseFloat(l.dto)||0}));
+    const bruto=ls2.reduce((s,l)=>s+l.precio*l.qty,0);
+    const subL =ls2.reduce((s,l)=>s+lineaNeta(l),0);
+    const dG   =parseFloat(dtoG)||0;
+    const total=subL*(1-dG/100);
+    const hayDL=ls2.some(l=>l.dto>0);
+    return(
+      <div style={{background:C.plomo,borderRadius:9,padding:"11px 15px",marginBottom:12}}>
+        {(hayDL||dG>0)&&<div style={{display:"flex",justifyContent:"space-between",color:C.textoSuave,fontSize:12,marginBottom:4}}><span>Bruto</span><span style={{fontFamily:"monospace"}}>{fmtEur(bruto)}</span></div>}
+        {hayDL&&<div style={{display:"flex",justifyContent:"space-between",color:C.rojo,fontSize:12,marginBottom:4}}><span>Dto. por lineas</span><span style={{fontFamily:"monospace"}}>-{fmtEur(bruto-subL)}</span></div>}
+        {dG>0&&<div style={{display:"flex",justifyContent:"space-between",color:C.rojo,fontSize:12,marginBottom:4}}><span>Dto. global ({dG}%)</span><span style={{fontFamily:"monospace"}}>-{fmtEur(subL*dG/100)}</span></div>}
+        {(hayDL||dG>0)&&<div style={{height:1,background:C.borde,margin:"5px 0"}}/>}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:C.texto,fontWeight:700,fontSize:14}}>Total</span>
+          <span style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:C.texto}}>{fmtEur(total)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  // Grid de lineas editable reutilizable
+  const GridLineas=({ls,addFn,updFn,delFn})=>(
+    <div style={{marginBottom:4}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 85px 44px 75px 60px 24px",gap:5,marginBottom:4,padding:"0 2px"}}>
+        {["Descripcion","Tipo","Qty","Precio","Dto %",""].map((h,i)=>(
+          <div key={i} style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase"}}>{h}</div>
+        ))}
+      </div>
+      {ls.map(l=>(
+        <div key={l.id} style={{display:"grid",gridTemplateColumns:"1fr 85px 44px 75px 60px 24px",gap:5,marginBottom:5,alignItems:"center"}}>
+          <input value={l.desc} onChange={e=>updFn(l.id,"desc",e.target.value)} placeholder="Descripcion"
+            style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 9px",color:C.texto,fontSize:12}}/>
+          <select value={l.tipo} onChange={e=>updFn(l.id,"tipo",e.target.value)}
+            style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 5px",color:C.textoSuave,fontSize:12}}>
+            <option value="pieza">Pieza</option><option value="trabajo">Trabajo</option><option value="otro">Otro</option>
+          </select>
+          <input type="number" value={l.qty} onChange={e=>updFn(l.id,"qty",e.target.value)} placeholder="1"
+            style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 5px",color:C.texto,fontSize:12,textAlign:"center"}}/>
+          <input type="number" value={l.precio} onChange={e=>updFn(l.id,"precio",e.target.value)} placeholder="0.00"
+            style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 7px",color:C.texto,fontSize:12,textAlign:"right"}}/>
+          <div style={{position:"relative"}}>
+            <input type="number" min="0" max="100" value={l.dto} onChange={e=>updFn(l.id,"dto",e.target.value)} placeholder="0"
+              style={{background:parseFloat(l.dto)>0?C.rojoClaro:C.carbono,border:`1px solid ${parseFloat(l.dto)>0?C.rojo+"60":C.borde}`,borderRadius:6,padding:"7px 18px 7px 7px",color:parseFloat(l.dto)>0?C.rojo:C.texto,fontSize:12,textAlign:"right",width:"100%",boxSizing:"border-box"}}/>
+            <span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",color:C.textoSuave,fontSize:11}}>%</span>
+          </div>
+          <button onClick={()=>delFn(l.id)} style={{background:"none",border:"none",color:C.rojo,fontSize:15,cursor:"pointer"}}>x</button>
+        </div>
+      ))}
+      <button onClick={addFn} style={{background:"none",border:`1px dashed ${C.borde}`,borderRadius:6,padding:"5px 13px",color:C.textoSuave,fontSize:12,cursor:"pointer",width:"100%",marginBottom:8}}>+ Anadir linea</button>
+    </div>
+  );
+
+  const BloqueDtoGlobal=({val,set})=>(
+    <div style={{background:C.plomo,borderRadius:8,padding:"10px 13px",marginBottom:10,display:"flex",alignItems:"center",gap:12}}>
+      <div style={{flex:1}}>
+        <div style={{color:C.texto,fontSize:13,fontWeight:600}}>Descuento global sobre el total</div>
+        <div style={{color:C.textoSuave,fontSize:11}}>Se aplica sobre el subtotal ya descontado por linea</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <input type="number" min="0" max="100" value={val} onChange={e=>set(e.target.value)} placeholder="0"
+          style={{background:parseFloat(val)>0?C.rojoClaro:C.carbono,border:`1px solid ${parseFloat(val)>0?C.rojo+"60":C.borde}`,borderRadius:6,padding:"7px 10px",color:parseFloat(val)>0?C.rojo:C.texto,fontSize:14,fontWeight:700,width:60,textAlign:"right"}}/>
+        <span style={{color:C.textoSuave,fontWeight:600}}>%</span>
+      </div>
+    </div>
+  );
+
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <div><div style={{fontSize:17,fontWeight:700,color:C.texto}}>Albaranes</div><div style={{fontSize:12,color:C.textoSuave,marginTop:1}}>Mecanico registra - dueno aprueba</div></div>
-        <Btn onClick={()=>setDlg(true)}>+ Registrar trabajo</Btn>
+        <div>
+          <div style={{fontSize:17,fontWeight:700,color:C.texto}}>Albaranes</div>
+          <div style={{fontSize:12,color:C.textoSuave,marginTop:1}}>Mecanico registra - dueno aprueba</div>
+        </div>
+        <Btn onClick={()=>setDlgNuevo(true)}>+ Registrar trabajo</Btn>
       </div>
+
       {pend.length>0&&<div style={{background:C.amarilloClaro,border:`1px solid ${C.amarillo}50`,borderRadius:10,padding:"9px 15px",marginBottom:14,color:C.amarillo,fontWeight:600,fontSize:13}}>{pend.length} esperando aprobacion</div>}
+
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
-        {albs.map(a=>{const e=EC[a.estado]||EC.pendiente;return(
-          <div key={a.id} onClick={()=>setOpen(a.id)} style={{background:C.carbono,border:`1px solid ${a.estado==="pendiente"?C.amarillo+"55":C.borde}`,borderRadius:10,padding:"13px 17px",display:"flex",alignItems:"center",gap:13,cursor:"pointer",flexWrap:"wrap"}}>
-            <div style={{fontFamily:"monospace",fontSize:11,color:C.textoSuave,flexShrink:0,width:70}}>{a.id}</div>
-            <div style={{flex:1,minWidth:150}}><div style={{fontWeight:700,color:C.texto,fontSize:13}}>{a.cliente}</div><div style={{color:C.textoSuave,fontSize:12}}>{a.veh} - {a.mec} - {a.fecha}</div></div>
-            <div style={{fontFamily:"monospace",fontWeight:800,fontSize:14,color:C.texto,flexShrink:0}}>{fmtEur(totalAlbConDto(a.lineas,a.dtoGlobal))}</div>
-            <Bdg color={e.col} bg={e.bg} txt={e.txt}/>
-          </div>
-        );})}
-      </div>
-
-      {/* MODAL DETALLE ALBARAN */}
-      {det&&<Dlg title={`Albaran ${det.id}`} onClose={()=>{setOpen(null);setRechazando(false);setMotivo("");}} w={560}>
-        <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
-          <div style={{flex:1}}><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Cliente</div><div style={{color:C.texto,fontWeight:700}}>{det.cliente}</div></div>
-          <div style={{flex:1}}><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Vehiculo</div><div style={{color:C.texto}}>{det.veh} - {det.mat}</div></div>
-          <div><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Mecanico</div><div style={{color:C.texto}}>{det.mec}</div></div>
-        </div>
-
-        {/* Tabla de lineas con dto */}
-        <div style={{background:C.plomo,borderRadius:8,overflow:"hidden",marginBottom:12}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 70px 44px 50px 90px",padding:"7px 12px",borderBottom:`1px solid ${C.borde}`,gap:6}}>
-            {["Descripcion","Tipo","Qty","Dto","Subtotal"].map(h=><div key={h} style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase"}}>{h}</div>)}
-          </div>
-          {det.lineas.map((l,i)=>{
-            const neta=lineaNeta(l);
-            const bruta=l.precio*l.qty;
-            const ahorro=bruta-neta;
-            return(
-              <div key={l.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 44px 50px 90px",padding:"10px 12px",borderBottom:i<det.lineas.length-1?`1px solid ${C.borde}`:"none",gap:6,alignItems:"center"}}>
-                <div style={{color:C.texto,fontSize:12}}>{l.desc}</div>
-                <div><span style={{fontSize:10,background:l.tipo==="pieza"?C.azulClaro:C.verdeClaro,color:l.tipo==="pieza"?C.azul:C.verde,borderRadius:4,padding:"2px 5px"}}>{l.tipo}</span></div>
-                <div style={{color:C.textoSuave,fontSize:12,textAlign:"center"}}>x{l.qty}</div>
-                <div>
-                  {l.dto>0
-                    ?<span style={{background:C.rojoClaro,color:C.rojo,fontSize:11,fontWeight:700,borderRadius:4,padding:"2px 6px"}}>-{l.dto}%</span>
-                    :<span style={{color:C.textoSuave,fontSize:11}}>-</span>}
-                </div>
-                <div style={{textAlign:"right"}}>
-                  <div style={{color:C.texto,fontFamily:"monospace",fontSize:13,fontWeight:700}}>{fmtEur(neta)}</div>
-                  {ahorro>0&&<div style={{color:C.textoSuave,fontSize:10,textDecoration:"line-through"}}>{fmtEur(bruta)}</div>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Resumen de descuentos */}
-        {det.lineas.some(l=>l.dto>0)&&(
-          <div style={{background:C.rojoClaro,border:`1px solid ${C.rojo}30`,borderRadius:8,padding:"8px 12px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{color:C.rojo,fontSize:12,fontWeight:600}}>Ahorro total por descuentos de linea</span>
-            <span style={{color:C.rojo,fontFamily:"monospace",fontWeight:800}}>-{fmtEur(det.lineas.reduce((s,l)=>{const bruta=l.precio*l.qty;const neta=lineaNeta(l);return s+(bruta-neta);},0))}</span>
-          </div>
-        )}
-
-        {/* Resumen de totales con descuentos */}
-        <div style={{background:C.plomo,borderRadius:9,padding:"11px 15px",marginBottom:12}}>
-          <div style={{display:"flex",justifyContent:"space-between",color:C.textoSuave,fontSize:12,marginBottom:4}}>
-            <span>Subtotal lineas</span><span style={{fontFamily:"monospace"}}>{fmtEur(totalAlb(det.lineas))}</span>
-          </div>
-          {det.lineas.some(l=>l.dto>0)&&<div style={{display:"flex",justifyContent:"space-between",color:C.rojo,fontSize:12,marginBottom:4}}>
-            <span>Dto. por lineas</span>
-            <span style={{fontFamily:"monospace"}}>-{fmtEur(det.lineas.reduce((s,l)=>{return s+(l.precio*l.qty - lineaNeta(l));},0))}</span>
-          </div>}
-          {(parseFloat(det.dtoGlobal)||0)>0&&<div style={{display:"flex",justifyContent:"space-between",color:C.rojo,fontSize:12,marginBottom:4}}>
-            <span>Dto. global ({det.dtoGlobal}%)</span>
-            <span style={{fontFamily:"monospace"}}>-{fmtEur(totalAlb(det.lineas)*(parseFloat(det.dtoGlobal)||0)/100)}</span>
-          </div>}
-          <div style={{height:1,background:C.borde,margin:"6px 0"}}/>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{color:C.texto,fontWeight:700,fontSize:14}}>Total</span>
-            <span style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:C.texto}}>{fmtEur(totalAlbConDto(det.lineas, det.dtoGlobal))}</span>
-          </div>
-        </div>
-
-        {det.nota&&<div style={{background:C.acentoSuave,border:`1px solid ${C.acento}30`,borderRadius:8,padding:"9px 13px",marginBottom:13}}><div style={{color:C.acento,fontSize:11,fontWeight:700,marginBottom:3}}>NOTA DEL MECANICO</div><div style={{color:C.texto,fontSize:12}}>{det.nota}</div></div>}
-
-        {det.estado==="pendiente"&&(rechazando
-          ?<div><Inp label="Motivo del rechazo" val={motivo} set={setMotivo} ph="Ej: falta la mano de obra..."/><div style={{display:"flex",gap:8}}><Btn v="gh" onClick={()=>setRechazando(false)}>Cancelar</Btn><Btn v="rd" onClick={()=>rechazar(det.id)}>Confirmar rechazo</Btn></div></div>
-          :<div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn v="rd" onClick={()=>setRechazando(true)}>Rechazar</Btn><Btn v="gr" onClick={()=>aprobar(det)}>Aprobar y facturar</Btn></div>
-        )}
-        {det.estado==="aprobado"&&<div style={{textAlign:"center",color:C.verde,fontWeight:700}}>Aprobado - Factura {det.fid} generada</div>}
-        {det.estado==="rechazado"&&<div style={{background:C.rojoClaro,border:`1px solid ${C.rojo}40`,borderRadius:8,padding:"10px 13px"}}><div style={{color:C.rojo,fontWeight:700}}>Rechazado</div>{det.motivo&&<div style={{color:C.texto,fontSize:12,marginTop:3}}>{det.motivo}</div>}</div>}
-      </Dlg>}
-
-      {/* MODAL NUEVO ALBARAN */}
-      {dlg&&<Dlg title="Registrar trabajo" onClose={()=>setDlg(false)} w={600}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
-          <Inp label="Cliente" val={form.cliente} set={v=>setForm({...form,cliente:v})} ph="Nombre"/>
-          <Inp label="Matricula" val={form.mat} set={v=>setForm({...form,mat:v})} ph="0000 XXX"/>
-          <Inp label="Vehiculo" val={form.veh} set={v=>setForm({...form,veh:v})} ph="Marca Modelo Anyo"/>
-          <Inp label="Mecanico" val={form.mec} set={v=>setForm({...form,mec:v})} ph="Tu nombre"/>
-        </div>
-        <div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:7}}>Trabajos y piezas</div>
-
-        {/* Cabecera columnas */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 85px 44px 75px 56px 24px",gap:5,marginBottom:4,padding:"0 2px"}}>
-          {["Descripcion","Tipo","Qty","Precio","Dto %",""].map((h,i)=>(<div key={i} style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase"}}>{h}</div>))}
-        </div>
-
-        {lineas.map(l=>{
-          const neta=lineaNeta({...l,precio:parseFloat(l.precio)||0,qty:parseInt(l.qty)||1,dto:parseFloat(l.dto)||0});
+        {albs.map(a=>{
+          const e=EC[a.estado]||EC.pendiente;
           return(
-            <div key={l.id} style={{display:"grid",gridTemplateColumns:"1fr 85px 44px 75px 56px 24px",gap:5,marginBottom:5,alignItems:"center"}}>
-              <input value={l.desc} onChange={e=>updL(l.id,"desc",e.target.value)} placeholder="Descripcion"
-                style={{background:C.plomo,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 9px",color:C.texto,fontSize:12}}/>
-              <select value={l.tipo} onChange={e=>updL(l.id,"tipo",e.target.value)}
-                style={{background:C.plomo,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 5px",color:C.textoSuave,fontSize:12}}>
-                <option value="pieza">Pieza</option><option value="trabajo">Trabajo</option><option value="otro">Otro</option>
-              </select>
-              <input type="number" value={l.qty} onChange={e=>updL(l.id,"qty",e.target.value)} placeholder="1"
-                style={{background:C.plomo,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 5px",color:C.texto,fontSize:12,textAlign:"center"}}/>
-              <input type="number" value={l.precio} onChange={e=>updL(l.id,"precio",e.target.value)} placeholder="0.00"
-                style={{background:C.plomo,border:`1px solid ${C.borde}`,borderRadius:6,padding:"7px 7px",color:C.texto,fontSize:12,textAlign:"right"}}/>
-              <div style={{position:"relative"}}>
-                <input type="number" min="0" max="100" value={l.dto} onChange={e=>updL(l.id,"dto",e.target.value)} placeholder="0"
-                  style={{background:l.dto>0?C.rojoClaro:C.plomo,border:`1px solid ${l.dto>0?C.rojo+"60":C.borde}`,borderRadius:6,padding:"7px 18px 7px 7px",color:l.dto>0?C.rojo:C.texto,fontSize:12,textAlign:"right",width:"100%",boxSizing:"border-box"}}/>
-                <span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",color:C.textoSuave,fontSize:11}}>%</span>
+            <div key={a.id} onClick={()=>{setOpen(a.id);setEditMode(false);setRechazando(false);setMotivo("");}}
+              style={{background:C.carbono,border:`1px solid ${a.estado==="pendiente"?C.amarillo+"55":C.borde}`,borderRadius:10,padding:"13px 17px",display:"flex",alignItems:"center",gap:13,cursor:"pointer",flexWrap:"wrap"}}>
+              <div style={{fontFamily:"monospace",fontSize:11,color:C.textoSuave,flexShrink:0,width:70}}>{a.id}</div>
+              <div style={{flex:1,minWidth:150}}>
+                <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{a.cliente}</div>
+                <div style={{color:C.textoSuave,fontSize:12}}>{a.veh} - {a.mec} - {a.fecha}</div>
               </div>
-              <button onClick={()=>delL(l.id)} style={{background:"none",border:"none",color:C.rojo,fontSize:15,cursor:"pointer"}}>x</button>
+              <div style={{fontFamily:"monospace",fontWeight:800,fontSize:14,color:C.texto,flexShrink:0}}>{fmtEur(totalAlbConDto(a.lineas,a.dtoGlobal))}</div>
+              <Bdg color={e.col} bg={e.bg} txt={e.txt}/>
             </div>
           );
         })}
+      </div>
 
-        <button onClick={addL} style={{background:"none",border:`1px dashed ${C.borde}`,borderRadius:6,padding:"5px 13px",color:C.textoSuave,fontSize:12,cursor:"pointer",width:"100%",marginBottom:7}}>+ Anadir linea</button>
+      {/* MODAL DETALLE */}
+      {det&&(
+        <Dlg title={editMode?`Editando ${det.id}`:`Albaran ${det.id}`} onClose={()=>{setOpen(null);setEditMode(false);setRechazando(false);setMotivo("");}} w={600}>
 
-        {/* Resumen live */}
-        {(()=>{
-          const bruto=lineas.reduce((s,l)=>(parseFloat(l.precio)||0)*(parseInt(l.qty)||1)+s,0);
-          const subLineas=lineas.reduce((s,l)=>s+lineaNeta({...l,precio:parseFloat(l.precio)||0,qty:parseInt(l.qty)||1,dto:parseFloat(l.dto)||0}),0);
-          const dtoG=parseFloat(form.dtoGlobal)||0;
-          const total=subLineas*(1-dtoG/100);
-          const hayDtoLinea=lineas.some(l=>parseFloat(l.dto)>0);
-          return(
-            <div style={{background:C.plomo,borderRadius:8,padding:"10px 13px",marginBottom:10}}>
-              {(hayDtoLinea||dtoG>0)&&<div style={{display:"flex",justifyContent:"space-between",color:C.textoSuave,fontSize:12,marginBottom:3}}>
-                <span>Bruto</span><span style={{fontFamily:"monospace"}}>{fmtEur(bruto)}</span>
-              </div>}
-              {hayDtoLinea&&<div style={{display:"flex",justifyContent:"space-between",color:C.rojo,fontSize:12,marginBottom:3}}>
-                <span>- Dto. por lineas</span><span style={{fontFamily:"monospace"}}>-{fmtEur(bruto-subLineas)}</span>
-              </div>}
-              {dtoG>0&&<div style={{display:"flex",justifyContent:"space-between",color:C.rojo,fontSize:12,marginBottom:3}}>
-                <span>- Dto. global ({dtoG}%)</span><span style={{fontFamily:"monospace"}}>-{fmtEur(subLineas*dtoG/100)}</span>
-              </div>}
-              {(hayDtoLinea||dtoG>0)&&<div style={{height:1,background:C.borde,margin:"5px 0"}}/>}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{color:C.texto,fontWeight:700,fontSize:13}}>Total</span>
-                <span style={{color:C.texto,fontFamily:"monospace",fontWeight:800,fontSize:16}}>{fmtEur(total)}</span>
-              </div>
+          {/* Cabecera (solo en vista) */}
+          {!editMode&&(
+            <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <div style={{flex:1}}><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Cliente</div><div style={{color:C.texto,fontWeight:700}}>{det.cliente}</div></div>
+              <div style={{flex:1}}><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Vehiculo</div><div style={{color:C.texto}}>{det.veh} - <span style={{fontFamily:"monospace"}}>{det.mat}</span></div></div>
+              <div><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Mecanico</div><div style={{color:C.texto}}>{det.mec}</div></div>
             </div>
-          );
-        })()}
+          )}
 
-        {/* Descuento global sobre el total del albaran */}
-        <div style={{background:C.plomo,borderRadius:8,padding:"10px 13px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
-          <div style={{flex:1}}>
-            <div style={{color:C.texto,fontSize:13,fontWeight:600}}>Descuento global sobre el total</div>
-            <div style={{color:C.textoSuave,fontSize:11}}>Se aplica sobre el subtotal ya descontado por linea</div>
+          {/* MODO VISTA */}
+          {!editMode&&(
+            <>
+              <div style={{background:C.plomo,borderRadius:8,overflow:"hidden",marginBottom:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 70px 44px 50px 90px",padding:"7px 12px",borderBottom:`1px solid ${C.borde}`,gap:6}}>
+                  {["Descripcion","Tipo","Qty","Dto","Subtotal"].map(h=><div key={h} style={{color:C.textoSuave,fontSize:10,fontWeight:600,textTransform:"uppercase"}}>{h}</div>)}
+                </div>
+                {det.lineas.map((l,i)=>{
+                  const neta=lineaNeta(l);const bruta=l.precio*l.qty;const ahorro=bruta-neta;
+                  return(
+                    <div key={l.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 44px 50px 90px",padding:"10px 12px",borderBottom:i<det.lineas.length-1?`1px solid ${C.borde}`:"none",gap:6,alignItems:"center"}}>
+                      <div style={{color:C.texto,fontSize:12}}>{l.desc}</div>
+                      <div><span style={{fontSize:10,background:l.tipo==="pieza"?C.azulClaro:C.verdeClaro,color:l.tipo==="pieza"?C.azul:C.verde,borderRadius:4,padding:"2px 5px"}}>{l.tipo}</span></div>
+                      <div style={{color:C.textoSuave,fontSize:12,textAlign:"center"}}>x{l.qty}</div>
+                      <div>{l.dto>0?<span style={{background:C.rojoClaro,color:C.rojo,fontSize:11,fontWeight:700,borderRadius:4,padding:"2px 6px"}}>-{l.dto}%</span>:<span style={{color:C.textoSuave,fontSize:11}}>-</span>}</div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{color:C.texto,fontFamily:"monospace",fontSize:13,fontWeight:700}}>{fmtEur(neta)}</div>
+                        {ahorro>0&&<div style={{color:C.textoSuave,fontSize:10,textDecoration:"line-through"}}>{fmtEur(bruta)}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <Resumen ls={det.lineas} dtoG={det.dtoGlobal}/>
+              {det.nota&&<div style={{background:C.acentoSuave,border:`1px solid ${C.acento}30`,borderRadius:8,padding:"9px 13px",marginBottom:12}}><div style={{color:C.acento,fontSize:11,fontWeight:700,marginBottom:3}}>NOTA DEL MECANICO</div><div style={{color:C.texto,fontSize:12}}>{det.nota}</div></div>}
+              {det.estado==="pendiente"&&(
+                rechazando
+                  ?<div><Inp label="Motivo del rechazo" val={motivo} set={setMotivo} ph="Ej: falta la mano de obra..."/><div style={{display:"flex",gap:8}}><Btn v="gh" onClick={()=>setRechazando(false)}>Cancelar</Btn><Btn v="rd" onClick={()=>rechazar(det.id)}>Confirmar rechazo</Btn></div></div>
+                  :<div style={{display:"flex",gap:8,justifyContent:"space-between",alignItems:"center"}}>
+                    <Btn v="bl" onClick={()=>abrirEdicion(det)}>Editar albaran</Btn>
+                    <div style={{display:"flex",gap:8}}>
+                      <Btn v="rd" onClick={()=>setRechazando(true)}>Rechazar</Btn>
+                      <Btn v="gr" onClick={()=>aprobar(det)}>Aprobar y facturar</Btn>
+                    </div>
+                  </div>
+              )}
+              {det.estado==="aprobado"&&<div style={{textAlign:"center",color:C.verde,fontWeight:700,padding:"8px 0"}}>Aprobado - Factura {det.fid} generada</div>}
+              {det.estado==="rechazado"&&<div style={{background:C.rojoClaro,border:`1px solid ${C.rojo}40`,borderRadius:8,padding:"10px 13px"}}><div style={{color:C.rojo,fontWeight:700}}>Rechazado</div>{det.motivo&&<div style={{color:C.texto,fontSize:12,marginTop:3}}>{det.motivo}</div>}</div>}
+            </>
+          )}
+
+          {/* MODO EDICION */}
+          {editMode&&(
+            <>
+              <GridLineas ls={eLineas} addFn={addEL} updFn={updEL} delFn={delEL}/>
+              <BloqueDtoGlobal val={eDtoGlobal} set={setEDtoGlobal}/>
+              <Resumen ls={eLineas} dtoG={eDtoGlobal}/>
+              <Inp label="Nota" val={eNota} set={setENota} ph="Observaciones para el dueno..."/>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <Btn v="gh" onClick={()=>setEditMode(false)}>Cancelar</Btn>
+                <Btn onClick={()=>guardarEdicion(det.id)}>Guardar cambios</Btn>
+              </div>
+            </>
+          )}
+        </Dlg>
+      )}
+
+      {/* MODAL NUEVO ALBARAN */}
+      {dlgNuevo&&(
+        <Dlg title="Registrar trabajo" onClose={()=>setDlgNuevo(false)} w={600}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 12px"}}>
+            <Inp label="Cliente"   val={form.cliente} set={v=>setForm({...form,cliente:v})} ph="Nombre"/>
+            <Inp label="Matricula" val={form.mat}     set={v=>setForm({...form,mat:v})}     ph="0000 XXX"/>
+            <Inp label="Vehiculo"  val={form.veh}     set={v=>setForm({...form,veh:v})}     ph="Marca Modelo Anyo"/>
+            <Inp label="Mecanico"  val={form.mec}     set={v=>setForm({...form,mec:v})}     ph="Tu nombre"/>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <input type="number" min="0" max="100" value={form.dtoGlobal} onChange={e=>setForm({...form,dtoGlobal:e.target.value})} placeholder="0"
-              style={{background:parseFloat(form.dtoGlobal)>0?C.rojoClaro:C.carbono,border:`1px solid ${parseFloat(form.dtoGlobal)>0?C.rojo+"60":C.borde}`,borderRadius:6,padding:"7px 10px",color:parseFloat(form.dtoGlobal)>0?C.rojo:C.texto,fontSize:14,fontWeight:700,width:60,textAlign:"right"}}/>
-            <span style={{color:C.textoSuave,fontWeight:600}}>%</span>
+          <GridLineas ls={lineas} addFn={addL} updFn={updL} delFn={delL}/>
+          <BloqueDtoGlobal val={form.dtoGlobal} set={v=>setForm({...form,dtoGlobal:v})}/>
+          <Resumen ls={lineas} dtoG={form.dtoGlobal}/>
+          <Inp label="Nota para el dueno" val={form.nota} set={v=>setForm({...form,nota:v})} ph="Algo que deba saber antes de aprobar..."/>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4}}>
+            <Btn v="gh" onClick={()=>setDlgNuevo(false)}>Cancelar</Btn>
+            <Btn onClick={guardar}>Enviar para aprobacion</Btn>
           </div>
-        </div>
-        <Inp label="Nota para el dueno" val={form.nota} set={v=>setForm({...form,nota:v})} ph="Algo que deba saber antes de aprobar..."/>
-        <div style={{display:"flex",gap:8,marginTop:6}}>
-          <Btn v="gh" onClick={()=>setDlg(false)}>Cancelar</Btn>
-          <Btn onClick={guardar}>Enviar para aprobacion</Btn>
-        </div>
-      </Dlg>}
+        </Dlg>
+      )}
     </div>
   );
 }
 
+
 // ── FACTURAS ──────────────────────────────────────────────────────────────────
+
+// ── GENERADOR PDF ─────────────────────────────────────────────────────────────
+function generarPDF(f){
+  const pdoc = new jsPDF({unit:"mm",format:"a4"});
+  const W=210, mg=20;
+  let y=20;
+  const gris1=[26,26,26], gris2=[42,42,42], naranja=[255,107,0];
+  const blanco=[240,240,240], suave=[136,136,136];
+
+  // Fondo
+  pdoc.setFillColor(...gris1); pdoc.rect(0,0,W,297,"F");
+
+  // Cabecera naranja
+  pdoc.setFillColor(...naranja); pdoc.rect(0,0,W,28,"F");
+  pdoc.setTextColor(255,255,255);
+  pdoc.setFontSize(18); pdoc.setFont("helvetica","bold");
+  pdoc.text("TALLER PEREZ",mg,13);
+  pdoc.setFontSize(9); pdoc.setFont("helvetica","normal");
+  pdoc.text("Av. de la Mecanica 47 · Valladolid · Tel: 983 000 000",mg,20);
+  pdoc.text(f.id, W-mg, 12, {align:"right"});
+  pdoc.text("Fecha: "+new Date().toLocaleDateString("es-ES"), W-mg, 19, {align:"right"});
+  y=40;
+
+  // Bloque cliente
+  pdoc.setFillColor(...gris2); pdoc.roundedRect(mg,y,W-mg*2,22,2,2,"F");
+  pdoc.setTextColor(...suave); pdoc.setFontSize(8); pdoc.setFont("helvetica","bold");
+  pdoc.text("CLIENTE",mg+5,y+7);
+  pdoc.setTextColor(...blanco); pdoc.setFontSize(11); pdoc.setFont("helvetica","bold");
+  pdoc.text(f.cliente,mg+5,y+15);
+  y+=30;
+
+  // Cabecera tabla
+  pdoc.setFillColor(...naranja); pdoc.rect(mg,y,W-mg*2,7,"F");
+  pdoc.setTextColor(255,255,255); pdoc.setFontSize(8); pdoc.setFont("helvetica","bold");
+  pdoc.text("DESCRIPCION",mg+3,y+5);
+  pdoc.text("IMPORTE",W-mg-3,y+5,{align:"right"});
+  y+=7;
+
+  // Lineas
+  f.servicios.forEach((l,i)=>{
+    pdoc.setFillColor(i%2===0?30:38,i%2===0?30:38,i%2===0?30:38);
+    pdoc.rect(mg,y,W-mg*2,8,"F");
+    pdoc.setTextColor(...blanco); pdoc.setFontSize(9); pdoc.setFont("helvetica","normal");
+    pdoc.text(l.desc,mg+3,y+5.5);
+    pdoc.text(l.precio.toFixed(2).replace(".",",")+" EUR",W-mg-3,y+5.5,{align:"right"});
+    y+=8;
+  });
+
+  // Total
+  y+=4;
+  pdoc.setFillColor(...naranja); pdoc.roundedRect(mg,y,W-mg*2,12,2,2,"F");
+  pdoc.setTextColor(255,255,255); pdoc.setFontSize(12); pdoc.setFont("helvetica","bold");
+  pdoc.text("TOTAL",mg+5,y+8);
+  const tot=f.servicios.reduce((s,l)=>s+l.precio,0);
+  pdoc.text(tot.toFixed(2).replace(".",",")+" EUR",W-mg-5,y+8,{align:"right"});
+  y+=20;
+
+  // Nota IVA
+  pdoc.setTextColor(...suave); pdoc.setFontSize(7); pdoc.setFont("helvetica","normal");
+  pdoc.text("* Precios sin IVA. IVA (21%) no incluido salvo indicacion expresa.",mg,y);
+
+  // Pie
+  pdoc.setFillColor(...gris2); pdoc.rect(0,275,W,22,"F");
+  pdoc.setTextColor(...suave); pdoc.setFontSize(7);
+  pdoc.text("Taller Perez · CIF: B-00000000 · Av. de la Mecanica 47, 47001 Valladolid",W/2,283,{align:"center"});
+  pdoc.text("tallerperezvlld@gmail.com · www.tallerperez.es",W/2,289,{align:"center"});
+
+  pdoc.save("Factura_"+f.id+".pdf");
+}
+
 
 function Facturas({facts,setFacts}){
   const [dlg,setDlg]=useState(false);
@@ -726,7 +853,7 @@ function Facturas({facts,setFacts}){
               <div style={{fontFamily:"monospace",fontWeight:800,fontSize:15,color:C.texto,flexShrink:0}}>{fmtEur(tot)}</div>
               <div style={{flexShrink:0}}>{f.aviso?<span style={{color:C.verde,fontSize:11,fontWeight:600}}>Avisado</span>:<Btn v="mo" sm onClick={()=>avisar(f.id)}>Avisar cliente</Btn>}</div>
               <div style={{flexShrink:0}}>{f.estado==="pagada"?<span style={{color:C.verde,fontSize:12,fontWeight:700}}>Pagada</span>:<Btn v="yw" sm onClick={()=>marcar(f.id)}>Cobrada</Btn>}</div>
-              <Btn v="gh" sm>PDF</Btn>
+              <Btn v="gh" sm onClick={()=>generarPDF(f)}>PDF</Btn>
             </div>
           );
         })}
@@ -903,12 +1030,60 @@ function Rentabilidad(){
 // ── APP ───────────────────────────────────────────────────────────────────────
 export default function App(){
   const [tab,setTab]=useState("portal");
-  const [citas,setCitas]  =useState(CITAS0);
-  const [facts,setFacts]  =useState(FACTURAS0);
-  const [albs,setAlbs]    =useState(ALBARANES0);
-  const [peds,setPeds]    =useState(PEDIDOS0);
-  const [comms,setComms]  =useState(COMMS0);
-  const [clts,setClts]    =useState(CLIENTES0);
+  const [citas,setCitas]    =useState(CITAS0);
+  const [facts,setFacts]    =useState(FACTURAS0);
+  const [albs,setAlbs]      =useState(ALBARANES0);
+  const [peds,setPeds]      =useState(PEDIDOS0);
+  const [comms,setComms]    =useState(COMMS0);
+  const [clts,setClts]      =useState(CLIENTES0);
+  const [fbReady,setFbReady]=useState(false);
+
+  // ── Carga inicial desde Firestore (una sola vez) ──────────────────────────
+  useEffect(()=>{
+    const cargar = async () => {
+      try {
+        const snap = await getDocs(collection(db,"taller"));
+        if(snap.empty){
+          // Primera vez: sube los datos iniciales
+          await Promise.all([
+            ...CITAS0.map(   d=>setDoc(doc(db,"taller",`cita_${d.id}`),   {tipo:"cita",   ...d})),
+            ...FACTURAS0.map(d=>setDoc(doc(db,"taller",`factura_${d.id}`),{tipo:"factura",...d})),
+            ...ALBARANES0.map(d=>setDoc(doc(db,"taller",`albaran_${d.id}`),{tipo:"albaran",...d})),
+            ...PEDIDOS0.map( d=>setDoc(doc(db,"taller",`pedido_${d.id}`), {tipo:"pedido", ...d})),
+            ...CLIENTES0.map(d=>setDoc(doc(db,"taller",`cliente_${d.id}`),{tipo:"cliente",...d})),
+            ...COMMS0.map(   d=>setDoc(doc(db,"taller",`comm_${d.id}`),   {tipo:"comm",   ...d})),
+          ]);
+        } else {
+          const docs = snap.docs.map(d=>d.data());
+          setCitas(   docs.filter(d=>d.tipo==="cita").map(   ({tipo,...r})=>r));
+          setFacts(   docs.filter(d=>d.tipo==="factura").map(({tipo,...r})=>r));
+          setAlbs(    docs.filter(d=>d.tipo==="albaran").map(({tipo,...r})=>r));
+          setPeds(    docs.filter(d=>d.tipo==="pedido").map( ({tipo,...r})=>r));
+          setClts(    docs.filter(d=>d.tipo==="cliente").map(({tipo,...r})=>r));
+          setComms(   docs.filter(d=>d.tipo==="comm").map(   ({tipo,...r})=>r));
+        }
+      } catch(e){ console.error("Firebase error:",e); }
+      setFbReady(true);
+    };
+    cargar();
+  },[]);
+
+  // ── Helpers para guardar en Firestore ─────────────────────────────────────
+  const saveCita    = async d => { await setDoc(doc(db,"taller",`cita_${d.id}`),   {tipo:"cita",   ...d}); };
+  const saveFactura = async d => { await setDoc(doc(db,"taller",`factura_${d.id}`),{tipo:"factura",...d}); };
+  const saveAlbaran = async d => { await setDoc(doc(db,"taller",`albaran_${d.id}`),{tipo:"albaran",...d}); };
+  const savePedido  = async d => { await setDoc(doc(db,"taller",`pedido_${d.id}`), {tipo:"pedido", ...d}); };
+  const saveCliente = async d => { await setDoc(doc(db,"taller",`cliente_${d.id}`),{tipo:"cliente",...d}); };
+  const saveComm    = async d => { await setDoc(doc(db,"taller",`comm_${d.id}`),   {tipo:"comm",   ...d}); };
+
+  // Wrappers que actualizan estado local Y Firestore
+  const setCitasFb = async nuevas => { setCitas(nuevas); for(const d of nuevas) await saveCita(d); };
+  const setFactsFb = async nuevas => { setFacts(nuevas); for(const d of nuevas) await saveFactura(d); };
+  const setAlbsFb  = async nuevas => { setAlbs(nuevas);  for(const d of nuevas) await saveAlbaran(d); };
+  const setPedsFb  = async nuevas => { setPeds(nuevas);  for(const d of nuevas) await savePedido(d); };
+  const setCltsFb   = async nuevas => { setClts(nuevas);  for(const d of nuevas) await saveCliente(d); };
+  const setCommsFb  = async nuevas => { setComms(nuevas); for(const d of nuevas) await saveComm(d); };
+
 
   const enT =citas.filter(c=>c.estado==="en_taller").length;
   const espP=citas.filter(c=>c.estado==="esperando_pieza").length;
@@ -970,14 +1145,20 @@ export default function App(){
           ))}
         </div>
 
-        {tab==="portal"         &&<PortalCliente    citas={citas} clientes={clts}/>}
-        {tab==="agenda"         &&<Agenda           citas={citas} set={setCitas}/>}
-        {tab==="comunicaciones" &&<Comms            comms={comms} setComms={setComms}/>}
-        {tab==="albaranes"      &&<Albaranes        albs={albs}   setAlbs={setAlbs}  setFacts={setFacts} setTab={setTab}/>}
-        {tab==="facturas"       &&<Facturas         facts={facts} setFacts={setFacts}/>}
-        {tab==="pedidos"        &&<Pedidos          peds={peds}   setPeds={setPeds}/>}
-        {tab==="clientes"       &&<Clientes         clientes={clts} setClientes={setClts}/>}
-        {tab==="rentabilidad"   &&<Rentabilidad/>}
+        {!fbReady&&(
+          <div style={{textAlign:"center",padding:"60px 0",color:C.textoSuave}}>
+            <div style={{fontSize:28,marginBottom:12}}>🔧</div>
+            <div style={{fontSize:14,fontWeight:600}}>Cargando datos...</div>
+          </div>
+        )}
+        {fbReady&&tab==="portal"         &&<PortalCliente    citas={citas} clientes={clts}/>}
+        {fbReady&&tab==="agenda"         &&<Agenda           citas={citas} set={setCitasFb}/>}
+        {fbReady&&tab==="comunicaciones" &&<Comms            comms={comms} setComms={setCommsFb}/>}
+        {fbReady&&tab==="albaranes"      &&<Albaranes        albs={albs}   setAlbs={setAlbsFb}  setFacts={setFactsFb} setTab={setTab}/>}
+        {fbReady&&tab==="facturas"       &&<Facturas         facts={facts} setFacts={setFactsFb}/>}
+        {fbReady&&tab==="pedidos"        &&<Pedidos          peds={peds}   setPeds={setPedsFb}/>}
+        {fbReady&&tab==="clientes"       &&<Clientes         clientes={clts} setClientes={setCltsFb}/>}
+        {fbReady&&tab==="rentabilidad"   &&<Rentabilidad/>}
       </div>
     </div>
   );
