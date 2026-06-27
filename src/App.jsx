@@ -307,9 +307,9 @@ function ClienteBuscador({value, onChange, onSeleccionar, clientes}){
 
   const filtrados = q.length>0
     ? clientes.filter(c=>
-        c.nombre.toLowerCase().includes(q.toLowerCase()) ||
-        c.matricula.toLowerCase().includes(q.toLowerCase()) ||
-        c.tel.includes(q)
+        (c.nombre||"").toLowerCase().includes(q.toLowerCase()) ||
+        (c.vehiculos||[]).some(v=>(v.matricula||"").toLowerCase().includes(q.toLowerCase())) ||
+        (c.tel||"").includes(q)
       ).slice(0,6)
     : [];
 
@@ -343,7 +343,7 @@ function ClienteBuscador({value, onChange, onSeleccionar, clientes}){
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{cli.nombre}</div>
                 <div style={{color:C.textoSuave,fontSize:11}}>
-                  {cli.vehiculos.length} coche{cli.vehiculos.length>1?"s":""} · {cli.vehiculos.map(v=>v.matricula).join(", ")}
+                  {(cli.vehiculos||[]).length} coche{(cli.vehiculos||[]).length!==1?"s":""} · {(cli.vehiculos||[]).map(v=>v.matricula).join(", ")}
                 </div>
               </div>
               <div style={{color:C.textoSuave,fontSize:11,fontFamily:"monospace",flexShrink:0}}>{cli.tel}</div>
@@ -754,7 +754,7 @@ function Agenda({citas,set,clientes}){
         <ClienteBuscador
           value={n.cliente}
           onChange={v=>setN({...n,cliente:v})}
-          onSeleccionar={cli=>setN(prev=>({...prev,cliente:cli.nombre,tel:cli.tel,vehiculo:"",matricula:"",_vehiculos:cli.vehiculos||[]}))}
+          onSeleccionar={cli=>setN(prev=>({...prev,cliente:cli.nombre||"",tel:cli.tel||"",vehiculo:"",matricula:"",_vehiculos:Array.isArray(cli.vehiculos)?cli.vehiculos:[]}))}
           clientes={clientes||[]}
         />
         {/* Si hay vehiculos del cliente, mostrar selector */}
@@ -880,8 +880,8 @@ function Clientes({clientes,setClientes}){
   const [nuevoForm,setNuevoForm]=useState({nombre:"",dni:"",tel:"",modelo:"",matricula:""});
 
   const lista=clientes.filter(c=>
-    c.nombre.toLowerCase().includes(q.toLowerCase())||
-    (c.vehiculos||[]).some(v=>v.matricula.toLowerCase().includes(q.toLowerCase()))||
+    (c.nombre||"").toLowerCase().includes(q.toLowerCase())||
+    (c.vehiculos||[]).some(v=>(v.matricula||"").toLowerCase().includes(q.toLowerCase()))||
     (c.tel||"").includes(q)
   );
   const det=clientes.find(c=>c.id===open);
