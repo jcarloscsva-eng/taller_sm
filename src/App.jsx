@@ -338,10 +338,10 @@ function ClienteBuscador({value, onChange, onSeleccionar, clientes}){
               onMouseEnter={e=>e.currentTarget.style.background=C.plomo}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{width:32,height:32,borderRadius:"50%",background:C.acentoSuave,border:`1px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:14,flexShrink:0}}>
-                {cli.nombre[0]}
+                {(cli.nombre||"?")[0]}
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{cli.nombre}</div>
+                <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{cli.nombre||""}</div>
                 <div style={{color:C.textoSuave,fontSize:11}}>
                   {(cli.vehiculos||[]).length} coche{(cli.vehiculos||[]).length!==1?"s":""} · {(cli.vehiculos||[]).map(v=>v.matricula).join(", ")}
                 </div>
@@ -885,7 +885,7 @@ function Clientes({clientes,setClientes}){
     (c.tel||"").includes(q)
   );
   const det=clientes.find(c=>c.id===open);
-  const revsCliente=det?(det.vehiculos||[]).flatMap(v=>REVISIONES.filter(r=>r.mat===v.matricula)):[];
+  const revsCliente=det?(Array.isArray(det.vehiculos)?det.vehiculos:[]).flatMap(v=>REVISIONES.filter(r=>r.mat===v.matricula)):[];
 
   const guardarNuevo=()=>{
     if(!nuevoForm.nombre||!nuevoForm.tel)return;
@@ -907,11 +907,11 @@ function Clientes({clientes,setClientes}){
     if(!modelo)return;
     const mat=prompt("Matricula:");
     if(!mat)return;
-    setClientes(clientes.map(c=>c.id===cliId?{...c,vehiculos:[...(c.vehiculos||[]),{id:`v${Date.now()}`,modelo,matricula:mat}]}:c));
+    setClientes(clientes.map(c=>c.id===cliId?{...c,vehiculos:[...Array.isArray(c.vehiculos)?c.vehiculos:[],{id:`v${Date.now()}`,modelo,matricula:mat}]}:c));
   };
 
   const delVehiculo=(cliId,vId)=>{
-    setClientes(clientes.map(c=>c.id===cliId?{...c,vehiculos:(c.vehiculos||[]).filter(v=>v.id!==vId)}:c));
+    setClientes(clientes.map(c=>c.id===cliId?{...c,vehiculos:(Array.isArray(c.vehiculos)?c.vehiculos:[]).filter(v=>v.id!==vId)}:c));
   };
 
   return(
@@ -937,13 +937,13 @@ function Clientes({clientes,setClientes}){
               onMouseLeave={e=>e.currentTarget.style.borderColor=C.borde}>
               {/* Avatar */}
               <div style={{width:40,height:40,borderRadius:"50%",background:C.acentoSuave,border:`1.5px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:16,flexShrink:0,position:"relative"}}>
-                {c.nombre[0]}
+                {(c.nombre||"?")[0]}
                 {/* Contador de coches */}
                 {nveh>0&&<div style={{position:"absolute",top:-4,right:-4,background:C.azul,color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.carbono}`}}>{nveh}</div>}
               </div>
               {/* Info */}
               <div style={{flex:1,minWidth:150}}>
-                <div style={{fontWeight:700,color:C.texto,fontSize:14}}>{c.nombre}</div>
+                <div style={{fontWeight:700,color:C.texto,fontSize:14}}>{c.nombre||""}</div>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>
                   {(c.vehiculos||[]).map((v,i)=>(
                     <span key={i} style={{background:C.plomo,border:`1px solid ${C.borde}`,borderRadius:4,padding:"1px 7px",fontSize:10,color:C.textoSuave,fontFamily:"monospace"}}>{v.matricula}</span>
@@ -958,11 +958,11 @@ function Clientes({clientes,setClientes}){
                   <div style={{color:C.textoSuave,fontSize:10}}>coches</div>
                 </div>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontWeight:800,color:C.texto,fontFamily:"monospace"}}>{c.visitas}</div>
+                  <div style={{fontWeight:800,color:C.texto,fontFamily:"monospace"}}>{c.visitas||0}</div>
                   <div style={{color:C.textoSuave,fontSize:10}}>visitas</div>
                 </div>
                 <div style={{textAlign:"center"}}>
-                  <div style={{fontWeight:800,color:C.verde,fontFamily:"monospace",fontSize:13}}>{fmtEur(c.gasto)}</div>
+                  <div style={{fontWeight:800,color:C.verde,fontFamily:"monospace",fontSize:13}}>{fmtEur(c.gasto||0)}</div>
                   <div style={{color:C.textoSuave,fontSize:10}}>gastado</div>
                 </div>
               </div>
@@ -981,10 +981,10 @@ function Clientes({clientes,setClientes}){
           {/* Cabecera ficha */}
           <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${C.borde}`}}>
             <div style={{width:56,height:56,borderRadius:"50%",background:C.acentoSuave,border:`2px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:22,flexShrink:0}}>
-              {det.nombre[0]}
+              {(det.nombre||"?")[0]}
             </div>
             <div style={{flex:1}}>
-              <div style={{fontSize:18,fontWeight:800,color:C.texto}}>{det.nombre}</div>
+              <div style={{fontSize:18,fontWeight:800,color:C.texto}}>{det.nombre||""}</div>
               <div style={{display:"flex",gap:12,marginTop:4,flexWrap:"wrap"}}>
                 <span style={{color:C.textoSuave,fontSize:12}}>📞 {det.tel}</span>
                 {det.dni&&<span style={{color:C.textoSuave,fontSize:12,fontFamily:"monospace"}}>DNI: {det.dni}</span>}
@@ -1014,7 +1014,7 @@ function Clientes({clientes,setClientes}){
           {/* Vehiculos */}
           <Hr label="Vehiculos"/>
           <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:4}}>
-            {(det.vehiculos||[]).map(v=>{
+            {(Array.isArray(det.vehiculos)?det.vehiculos:[]).map(v=>{
               const revsV=REVISIONES.filter(r=>r.mat===v.matricula);
               return(
                 <div key={v.id} style={{background:C.plomo,borderRadius:9,padding:"11px 14px",display:"flex",alignItems:"center",gap:12}}>
