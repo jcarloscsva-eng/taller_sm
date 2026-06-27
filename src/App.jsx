@@ -28,11 +28,16 @@ const totalAlbConDto = (ls, dtoGlobal) => totalAlb(ls) * (1 - (parseFloat(dtoGlo
 // ── DATOS ────────────────────────────────────────────────────────────────────
 // DNI ficticios vinculados a cada cliente (para el portal)
 const CLIENTES0 = [
-  {id:1,nombre:"Maria Garcia", vehiculo:"Seat Ibiza 2019",   matricula:"4821KPL",dni:"12345678A",tel:"612345678",visitas:8, gasto:1240,val:5},
-  {id:2,nombre:"Juan Lopez",   vehiculo:"Ford Focus 2021",    matricula:"9034MNQ",dni:"23456789B",tel:"634567890",visitas:3, gasto:680, val:4},
-  {id:3,nombre:"Carlos Ruiz",  vehiculo:"VW Golf 2017",       matricula:"2209FRT",dni:"34567890C",tel:"678901234",visitas:12,gasto:2890,val:5},
-  {id:4,nombre:"Ana Martin",   vehiculo:"Renault Clio 2020",  matricula:"7712ABZ",dni:"45678901D",tel:"645123456",visitas:5, gasto:920, val:3},
-  {id:5,nombre:"Pedro Sanchez",vehiculo:"Peugeot 308 2018",   matricula:"5590CDF",dni:"56789012E",tel:"689234567",visitas:2, gasto:340, val:null},
+  {id:1,nombre:"Maria Garcia", dni:"12345678A",tel:"612345678",visitas:8, gasto:1240,val:5,
+   vehiculos:[{id:"v1a",modelo:"Seat Ibiza 2019",matricula:"4821KPL"},{id:"v1b",modelo:"Renault Megane 2015",matricula:"3312XYZ"}]},
+  {id:2,nombre:"Juan Lopez",   dni:"23456789B",tel:"634567890",visitas:3, gasto:680, val:4,
+   vehiculos:[{id:"v2a",modelo:"Ford Focus 2021",matricula:"9034MNQ"}]},
+  {id:3,nombre:"Carlos Ruiz",  dni:"34567890C",tel:"678901234",visitas:12,gasto:2890,val:5,
+   vehiculos:[{id:"v3a",modelo:"VW Golf 2017",matricula:"2209FRT"},{id:"v3b",modelo:"BMW Serie 1 2020",matricula:"6601ABC"}]},
+  {id:4,nombre:"Ana Martin",   dni:"45678901D",tel:"645123456",visitas:5, gasto:920, val:3,
+   vehiculos:[{id:"v4a",modelo:"Renault Clio 2020",matricula:"7712ABZ"}]},
+  {id:5,nombre:"Pedro Sanchez",dni:"56789012E",tel:"689234567",visitas:2, gasto:340, val:null,
+   vehiculos:[{id:"v5a",modelo:"Peugeot 308 2018",matricula:"5590CDF"},{id:"v5b",modelo:"Toyota RAV4 2022",matricula:"8823DEF"}]},
 ];
 const CITAS0 = [
   {id:1,hora:"08:30",cliente:"Maria Garcia",  vehiculo:"Seat Ibiza 2019",   matricula:"4821KPL",servicio:"Cambio aceite + filtros",estado:"completada",     tel:"612345678",rec:"enviado"},
@@ -235,7 +240,7 @@ function PortalCliente({citas,clientes}){
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,color:C.textoSuave,fontWeight:600}}>Hola, {cliente.nombre}</div>
                   <div style={{fontSize:16,fontWeight:800,color:C.texto,marginTop:1}}>{cliente.vehiculo}</div>
-                  <div style={{fontFamily:"monospace",fontSize:13,color:C.textoSuave,letterSpacing:"0.05em"}}>{cliente.matricula}</div>
+                  <div style={{fontFamily:"monospace",fontSize:13,color:C.textoSuave,letterSpacing:"0.05em"}}>{(cliente.vehiculos&&cliente.vehiculos[0])?cliente.vehiculos[0].matricula:cliente.matricula}</div>
                 </div>
               </div>
 
@@ -293,67 +298,467 @@ function PortalCliente({citas,clientes}){
   );
 }
 
+
+
+// ── BUSCADOR DE CLIENTE ───────────────────────────────────────────────────────
+function ClienteBuscador({value, onChange, onSeleccionar, clientes}){
+  const [abierto, setAbierto] = useState(false);
+  const [q, setQ]             = useState(value||"");
+
+  const filtrados = q.length>0
+    ? clientes.filter(c=>
+        c.nombre.toLowerCase().includes(q.toLowerCase()) ||
+        c.matricula.toLowerCase().includes(q.toLowerCase()) ||
+        c.tel.includes(q)
+      ).slice(0,6)
+    : [];
+
+  const seleccionar = cli => {
+    setQ(cli.nombre);
+    onChange(cli.nombre);
+    onSeleccionar(cli);
+    setAbierto(false);
+  };
+
+  return(
+    <div style={{marginBottom:11,position:"relative"}}>
+      <label style={{display:"block",color:C.textoSuave,fontSize:11,fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Cliente</label>
+      <input
+        value={q}
+        onChange={e=>{setQ(e.target.value);onChange(e.target.value);setAbierto(true);}}
+        onFocus={()=>setAbierto(true)}
+        placeholder="Nombre, matricula o telefono..."
+        style={{width:"100%",background:C.plomo,border:`1px solid ${abierto&&filtrados.length>0?C.acento:C.borde}`,borderRadius:7,padding:"9px 12px",color:C.texto,fontSize:13,boxSizing:"border-box"}}
+      />
+      {abierto&&filtrados.length>0&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:300,background:C.carbono,border:`1px solid ${C.acento}`,borderRadius:10,overflow:"hidden",marginTop:4,boxShadow:"0 8px 24px #000a"}}>
+          {filtrados.map(cli=>(
+            <div key={cli.id} onClick={()=>seleccionar(cli)}
+              style={{padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid ${C.borde}`,display:"flex",alignItems:"center",gap:12}}
+              onMouseEnter={e=>e.currentTarget.style.background=C.plomo}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:C.acentoSuave,border:`1px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:14,flexShrink:0}}>
+                {cli.nombre[0]}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{cli.nombre}</div>
+                <div style={{color:C.textoSuave,fontSize:11}}>
+                  {cli.vehiculos.length} coche{cli.vehiculos.length>1?"s":""} · {cli.vehiculos.map(v=>v.matricula).join(", ")}
+                </div>
+              </div>
+              <div style={{color:C.textoSuave,fontSize:11,fontFamily:"monospace",flexShrink:0}}>{cli.tel}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {abierto&&q.length>0&&filtrados.length===0&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:300,background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:10,padding:"12px 14px",marginTop:4,color:C.textoSuave,fontSize:12}}>
+          No hay clientes con ese nombre. Se creara como nuevo.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SELECTOR DE HORA ─────────────────────────────────────────────────────────
+function TimePicker({value, onChange}){
+  const [abierto, setAbierto] = useState(false);
+  const [fase, setFase]       = useState("horas"); // "horas" | "minutos"
+  const horas   = [8,9,10,11,12,13,14,15,16,17,18,19];
+  const minutos = [0,5,10,15,20,25,30,35,40,45,50,55];
+
+  const partes  = value ? value.split(":") : ["--","--"];
+  const hSel    = partes[0];
+  const mSel    = partes[1];
+
+  const elegirHora = h => {
+    const hStr = String(h).padStart(2,"0");
+    const mStr = mSel==="--" ? "00" : mSel;
+    onChange(`${hStr}:${mStr}`);
+    setFase("minutos");
+  };
+  const elegirMin = m => {
+    const hStr = hSel==="--" ? "08" : hSel;
+    const mStr = String(m).padStart(2,"0");
+    onChange(`${hStr}:${mStr}`);
+    setFase("horas");
+    setAbierto(false);
+  };
+
+  return(
+    <div style={{marginBottom:11,position:"relative"}}>
+      <label style={{display:"block",color:C.textoSuave,fontSize:11,fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Hora</label>
+      {/* Campo visible */}
+      <div onClick={()=>{setAbierto(a=>!a);setFase("horas");}}
+        style={{width:"100%",background:C.plomo,border:`1px solid ${abierto?C.acento:C.borde}`,borderRadius:7,padding:"9px 12px",color:value?C.texto:C.textoSuave,fontSize:13,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",boxSizing:"border-box"}}>
+        <span style={{fontFamily:"monospace",fontWeight:value?700:400}}>{value||"Seleccionar hora"}</span>
+        <span style={{fontSize:16}}>🕐</span>
+      </div>
+
+      {/* Panel del reloj */}
+      {abierto&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:300,background:C.carbono,border:`1px solid ${C.acento}`,borderRadius:10,padding:14,marginTop:4,boxShadow:"0 8px 32px #000a"}}>
+          {/* Selector fase */}
+          <div style={{display:"flex",gap:4,marginBottom:12,background:C.plomo,borderRadius:7,padding:3}}>
+            {[["horas","Hora"],["minutos","Minutos"]].map(([k,l])=>(
+              <button key={k} onClick={()=>setFase(k)}
+                style={{flex:1,background:fase===k?C.acento:"none",color:fase===k?"#fff":C.textoSuave,border:"none",borderRadius:5,padding:"5px 0",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                {l} {k==="horas"?hSel!=="--"?hSel+"h":"":mSel!=="--"?mSel+"m":""}
+              </button>
+            ))}
+          </div>
+
+          {/* Grid de horas */}
+          {fase==="horas"&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+              {horas.map(h=>{
+                const hStr=String(h).padStart(2,"0");
+                const sel=hStr===hSel;
+                return(
+                  <button key={h} onClick={()=>elegirHora(h)}
+                    style={{background:sel?C.acento:C.plomo,color:sel?"#fff":C.texto,border:`1px solid ${sel?C.acento:C.borde}`,borderRadius:7,padding:"9px 4px",fontSize:13,fontWeight:sel?700:400,cursor:"pointer",fontFamily:"monospace"}}>
+                    {hStr}:00
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Grid de minutos */}
+          {fase==="minutos"&&(
+            <div>
+              <div style={{color:C.textoSuave,fontSize:11,marginBottom:8,textAlign:"center"}}>
+                Minutos para las <b style={{color:C.acento}}>{hSel}h</b>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+                {minutos.map(m=>{
+                  const mStr=String(m).padStart(2,"0");
+                  const sel=mStr===mSel;
+                  return(
+                    <button key={m} onClick={()=>elegirMin(m)}
+                      style={{background:sel?C.acento:C.plomo,color:sel?"#fff":C.texto,border:`1px solid ${sel?C.acento:C.borde}`,borderRadius:7,padding:"9px 4px",fontSize:13,fontWeight:sel?700:400,cursor:"pointer",fontFamily:"monospace"}}>
+                      :{mStr}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <button onClick={()=>setAbierto(false)} style={{marginTop:10,width:"100%",background:C.plomo,border:`1px solid ${C.borde}`,color:C.textoSuave,borderRadius:7,padding:"7px",fontSize:12,cursor:"pointer"}}>Cerrar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AGENDA ───────────────────────────────────────────────────────────────────
 const EST = {
-  completada:      {txt:"Completada",     col:C.verde,   bg:C.verdeClaro},
-  en_taller:       {txt:"En taller",      col:C.acento,  bg:C.acentoSuave},
-  esperando:       {txt:"Esperando",      col:C.amarillo,bg:C.amarilloClaro},
-  esperando_pieza: {txt:"Esperando pieza",col:C.morado,  bg:C.moradoClaro},
-  confirmada:      {txt:"Confirmada",     col:C.textoSuave,bg:C.plomo},
+  completada:      {txt:"Completada",     col:C.verde,      bg:C.verdeClaro},
+  en_taller:       {txt:"En taller",      col:C.acento,     bg:C.acentoSuave},
+  esperando:       {txt:"Esperando",      col:C.amarillo,   bg:C.amarilloClaro},
+  esperando_pieza: {txt:"Esperando pieza",col:C.morado,     bg:C.moradoClaro},
+  confirmada:      {txt:"Confirmada",     col:C.textoSuave, bg:C.plomo},
 };
-function Agenda({citas,set}){
-  const [dlg,setDlg]=useState(false);
-  const [n,setN]=useState({hora:"",cliente:"",vehiculo:"",matricula:"",servicio:"",tel:""});
-  const [toast,setToast]=useState(null);
+
+// Helpers de fecha
+const DIAS=["Dom","Lun","Mar","Mie","Jue","Vie","Sab"];
+const MESES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const fmtFecha=d=>`${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
+const fmtFechaCorta=d=>`${d.getDate()}/${d.getMonth()+1}`;
+const clavesDia=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const hoy=new Date(2026,5,27); // Sabado 27 junio 2026
+
+// Citas de ejemplo para otros dias de la semana (datos ficticios)
+const EXTRA_CITAS=[
+  {id:101,fecha:"2026-06-22",hora:"09:00",cliente:"Marta Iglesias",vehiculo:"Seat Leon 2020",matricula:"8821ABC",servicio:"Revision general",estado:"completada",tel:"666111222",rec:"enviado"},
+  {id:102,fecha:"2026-06-22",hora:"11:00",cliente:"Tomas Vidal",vehiculo:"Ford Kuga 2019",matricula:"3344DEF",servicio:"Cambio aceite",estado:"completada",tel:"677222333",rec:"enviado"},
+  {id:103,fecha:"2026-06-23",hora:"10:00",cliente:"Sara Blanco",vehiculo:"Hyundai Tucson",matricula:"5566GHI",servicio:"Frenos traseros",estado:"completada",tel:"688333444",rec:"enviado"},
+  {id:104,fecha:"2026-06-24",hora:"08:30",cliente:"Diego Molina",vehiculo:"Kia Sportage",matricula:"7788JKL",servicio:"ITV preparacion",estado:"completada",tel:"699444555",rec:"enviado"},
+  {id:105,fecha:"2026-06-24",hora:"12:00",cliente:"Lucia Perez",vehiculo:"Dacia Sandero",matricula:"9900MNO",servicio:"Cambio bateria",estado:"completada",tel:"600555666",rec:"enviado"},
+  {id:106,fecha:"2026-06-25",hora:"09:30",cliente:"Andres Gil",vehiculo:"Opel Astra 2021",matricula:"1122PQR",servicio:"Diagnosis averia",estado:"completada",tel:"611666777",rec:"enviado"},
+  {id:107,fecha:"2026-06-26",hora:"10:30",cliente:"Elena Ramos",vehiculo:"Mazda CX5",matricula:"3344STU",servicio:"Cambio neumaticos",estado:"completada",tel:"622777888",rec:"enviado"},
+  {id:108,fecha:"2026-06-26",hora:"15:00",cliente:"Pablo Herrera",vehiculo:"BMW Serie 3",matricula:"5566VWX",servicio:"Revision completa",estado:"completada",tel:"633888999",rec:"enviado"},
+  {id:109,fecha:"2026-06-28",hora:"09:00",cliente:"Carmen Soto",vehiculo:"Seat Arona 2022",matricula:"7788YZA",servicio:"Cambio aceite",estado:"confirmada",tel:"644999000",rec:"no_enviado"},
+  {id:110,fecha:"2026-06-28",hora:"11:30",cliente:"Victor Mora",vehiculo:"Toyota Yaris",matricula:"9900BCD",servicio:"Frenos delanteros",estado:"confirmada",tel:"655000111",rec:"no_enviado"},
+  {id:111,fecha:"2026-06-29",hora:"10:00",cliente:"Isabel Castro",vehiculo:"Renault Captur",matricula:"1122EFG",servicio:"ITV preparacion",estado:"confirmada",tel:"666111333",rec:"no_enviado"},
+  {id:112,fecha:"2026-06-30",hora:"09:30",cliente:"Marcos Ruiz",vehiculo:"Peugeot 2008",matricula:"3344HIJ",servicio:"Revision general",estado:"confirmada",tel:"677222444",rec:"no_enviado"},
+  {id:113,fecha:"2026-06-30",hora:"14:00",cliente:"Nuria Vega",vehiculo:"Citroen C3",matricula:"5566KLM",servicio:"Cambio neumaticos",estado:"confirmada",tel:"688333555",rec:"no_enviado"},
+];
+
+function TarjetaCita({c,onCambiar,onRecordar}){
+  const e=EST[c.estado]||EST.confirmada;
+  return(
+    <div style={{background:C.carbono,border:`1px solid ${c.estado==="en_taller"?C.acento+"55":c.estado==="esperando_pieza"?C.morado+"55":C.borde}`,borderRadius:10,padding:"11px 14px",display:"flex",alignItems:"center",gap:11,flexWrap:"wrap"}}>
+      <div style={{width:44,textAlign:"center",flexShrink:0}}>
+        <div style={{fontSize:13,fontWeight:800,color:C.acento,fontFamily:"monospace"}}>{c.hora}</div>
+      </div>
+      <div style={{flex:1,minWidth:140}}>
+        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+          <span style={{fontWeight:700,color:C.texto,fontSize:13}}>{c.cliente}</span>
+          <span style={{color:C.textoSuave,fontSize:11}}>{c.vehiculo}</span>
+          <span style={{background:C.plomo,color:C.textoSuave,borderRadius:4,padding:"1px 5px",fontSize:10,fontFamily:"monospace"}}>{c.matricula}</span>
+        </div>
+        <div style={{color:C.textoSuave,fontSize:11,marginTop:2}}>{c.servicio}</div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,flexWrap:"wrap"}}>
+        {c.rec==="enviado"
+          ?<span style={{fontSize:10,color:C.verde,fontWeight:600}}>Recordatorio OK</span>
+          :<Btn v="gh" sm onClick={()=>onRecordar(c.id)}>Recordar</Btn>}
+        <Bdg color={e.col} bg={e.bg} txt={e.txt}/>
+        <select value={c.estado} onChange={ev=>onCambiar(c.id,ev.target.value)}
+          style={{background:C.plomo,color:C.textoSuave,border:`1px solid ${C.borde}`,borderRadius:6,padding:"3px 6px",fontSize:10,cursor:"pointer"}}>
+          <option value="confirmada">Confirmada</option>
+          <option value="esperando">Esperando</option>
+          <option value="en_taller">En taller</option>
+          <option value="esperando_pieza">Esp. pieza</option>
+          <option value="completada">Completada</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function Agenda({citas,set,clientes}){
+  const [vista,setVista]  =useState("dia");   // "dia" | "semana" | "mes"
+  const [offset,setOffset]=useState(0);        // dias/semanas/meses de desplazamiento
+  const [dlg,setDlg]      =useState(false);
+  const [n,setN]          =useState({hora:"",cliente:"",vehiculo:"",matricula:"",servicio:"",tel:"",fecha:""});
+  const [toast,setToast]  =useState(null);
+
+  // Combina citas reales (sin fecha = hoy) con las de ejemplo para otros dias
+  const todasCitas=[
+    ...citas.map(c=>({...c,fecha:c.fecha||"2026-06-27"})),
+    ...EXTRA_CITAS,
+  ];
+
   const cambiar=(id,est)=>{
-    if(est==="completada"){const c=citas.find(x=>x.id===id);setToast(c.cliente);setTimeout(()=>setToast(null),3000);}
-    set(citas.map(c=>c.id===id?{...c,estado:est}:c));
+    if(est==="completada"){
+      const c=todasCitas.find(x=>x.id===id);
+      if(c){setToast(c.cliente);setTimeout(()=>setToast(null),3000);}
+    }
+    // Solo actualiza las citas reales (no las de ejemplo)
+    if(citas.find(x=>x.id===id)) set(citas.map(c=>c.id===id?{...c,estado:est}:c));
   };
+  const recordar=id=>{
+    if(citas.find(x=>x.id===id)) set(citas.map(c=>c.id===id?{...c,rec:"enviado"}:c));
+  };
+  const guardar=()=>{
+    if(!n.cliente||!n.hora)return;
+    const fechaNueva=n.fecha||"2026-06-27";
+    set([...citas,{...n,id:Date.now(),fecha:fechaNueva,estado:"confirmada",rec:"no_enviado"}]);
+    setN({hora:"",cliente:"",vehiculo:"",matricula:"",servicio:"",tel:"",fecha:""});
+    setDlg(false);
+  };
+
+  // ── Calculos de rango segun vista ─────────────────────────────────────────
+  const base=new Date(hoy);
+  let titulo="", diasRango=[];
+
+  if(vista==="dia"){
+    base.setDate(base.getDate()+offset);
+    titulo=fmtFecha(base);
+    diasRango=[clavesDia(base)];
+  } else if(vista==="semana"){
+    // Lunes de la semana actual + offset semanas
+    const lunes=new Date(hoy);
+    const diff=hoy.getDay()===0?-6:1-hoy.getDay();
+    lunes.setDate(hoy.getDate()+diff+offset*7);
+    const domingo=new Date(lunes); domingo.setDate(lunes.getDate()+6);
+    titulo=`${fmtFecha(lunes)} — ${fmtFecha(domingo)}`;
+    for(let i=0;i<7;i++){const d=new Date(lunes);d.setDate(lunes.getDate()+i);diasRango.push(clavesDia(d));}
+  } else {
+    // Mes
+    const mesBase=new Date(hoy.getFullYear(),hoy.getMonth()+offset,1);
+    titulo=`${MESES[mesBase.getMonth()]} ${mesBase.getFullYear()}`;
+    const ultimo=new Date(mesBase.getFullYear(),mesBase.getMonth()+1,0).getDate();
+    for(let i=1;i<=ultimo;i++){
+      const d=new Date(mesBase.getFullYear(),mesBase.getMonth(),i);
+      diasRango.push(clavesDia(d));
+    }
+  }
+
+  // Citas filtradas por rango
+  const citasRango=todasCitas.filter(c=>diasRango.includes(c.fecha));
   const recPend=citas.filter(c=>c.rec!=="enviado").length;
+
   return(
     <div>
       {toast&&<div style={{position:"fixed",bottom:22,right:22,zIndex:999,background:C.verde,color:"#fff",borderRadius:12,padding:"13px 18px",fontWeight:700,fontSize:13,boxShadow:"0 4px 20px #0009"}}>Aviso enviado a {toast} por WhatsApp</div>}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <div><div style={{fontSize:17,fontWeight:700,color:C.texto}}>Agenda de hoy</div><div style={{fontSize:12,color:C.textoSuave}}>Sabado 27 junio 2026</div></div>
-        <div style={{display:"flex",gap:8}}>
+
+      {/* ── CABECERA ── */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexWrap:"wrap",gap:8}}>
+        <div style={{fontSize:17,fontWeight:700,color:C.texto}}>Agenda</div>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          {/* Selector de vista */}
+          <div style={{display:"flex",background:C.plomo,borderRadius:8,padding:2,gap:2}}>
+            {[["dia","Dia"],["semana","Semana"],["mes","Mes"]].map(([k,l])=>(
+              <button key={k} onClick={()=>{setVista(k);setOffset(0);}}
+                style={{background:vista===k?C.acento:"none",color:vista===k?"#fff":C.textoSuave,border:"none",borderRadius:6,padding:"5px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {/* Navegacion */}
+          <button onClick={()=>setOffset(o=>o-1)} style={{background:C.plomo,border:`1px solid ${C.borde}`,color:C.texto,borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:14}}>&#8249;</button>
+          <button onClick={()=>setOffset(0)} style={{background:C.plomo,border:`1px solid ${C.borde}`,color:C.textoSuave,borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:11}}>Hoy</button>
+          <button onClick={()=>setOffset(o=>o+1)} style={{background:C.plomo,border:`1px solid ${C.borde}`,color:C.texto,borderRadius:7,padding:"5px 10px",cursor:"pointer",fontSize:14}}>&#8250;</button>
           {recPend>0&&<Btn v="yw" sm onClick={()=>set(citas.map(c=>({...c,rec:"enviado"})))}>Recordatorios ({recPend})</Btn>}
           <Btn onClick={()=>setDlg(true)}>+ Nueva cita</Btn>
         </div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:7}}>
-        {[...citas].sort((a,b)=>a.hora.localeCompare(b.hora)).map(c=>{
-          const e=EST[c.estado]||EST.confirmada;
-          return(
-            <div key={c.id} style={{background:C.carbono,border:`1px solid ${c.estado==="en_taller"?C.acento+"55":c.estado==="esperando_pieza"?C.morado+"55":C.borde}`,borderRadius:10,padding:"12px 15px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-              <div style={{width:44,textAlign:"center",flexShrink:0}}><div style={{fontSize:14,fontWeight:800,color:C.acento,fontFamily:"monospace"}}>{c.hora}</div></div>
-              <div style={{flex:1,minWidth:160}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                  <span style={{fontWeight:700,color:C.texto,fontSize:13}}>{c.cliente}</span>
-                  <span style={{color:C.textoSuave,fontSize:12}}>{c.vehiculo}</span>
-                  <span style={{background:C.plomo,color:C.textoSuave,borderRadius:4,padding:"1px 6px",fontSize:11,fontFamily:"monospace"}}>{c.matricula}</span>
+
+      {/* Titulo del rango */}
+      <div style={{fontSize:13,color:C.textoSuave,marginBottom:14,fontWeight:600}}>{titulo} · {citasRango.length} cita{citasRango.length!==1?"s":""}</div>
+
+      {/* ── VISTA DIA ── */}
+      {vista==="dia"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {citasRango.length===0&&<div style={{color:C.textoSuave,fontSize:13,textAlign:"center",padding:"40px 0"}}>Sin citas este dia</div>}
+          {[...citasRango].sort((a,b)=>a.hora.localeCompare(b.hora)).map(c=>(
+            <TarjetaCita key={c.id} c={c} onCambiar={cambiar} onRecordar={recordar}/>
+          ))}
+        </div>
+      )}
+
+      {/* ── VISTA SEMANA ── */}
+      {vista==="semana"&&(()=>{
+        const lunes=new Date(hoy);
+        const diff=hoy.getDay()===0?-6:1-hoy.getDay();
+        lunes.setDate(hoy.getDate()+diff+offset*7);
+        return(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:6}}>
+            {diasRango.map((clave,i)=>{
+              const d=new Date(lunes); d.setDate(lunes.getDate()+i);
+              const citasDia=[...citasRango].filter(c=>c.fecha===clave).sort((a,b)=>a.hora.localeCompare(b.hora));
+              const esHoy=clave===clavesDia(hoy);
+              return(
+                <div key={clave} style={{background:C.carbono,border:`1px solid ${esHoy?C.acento+"60":C.borde}`,borderRadius:10,padding:"10px 8px",minHeight:120}}>
+                  <div style={{textAlign:"center",marginBottom:8}}>
+                    <div style={{fontSize:10,color:C.textoSuave,fontWeight:600,textTransform:"uppercase"}}>{DIAS[d.getDay()]}</div>
+                    <div style={{fontSize:18,fontWeight:800,color:esHoy?C.acento:C.texto,fontFamily:"monospace"}}>{d.getDate()}</div>
+                  </div>
+                  {citasDia.length===0&&<div style={{color:C.borde,fontSize:10,textAlign:"center"}}>-</div>}
+                  {citasDia.map(c=>{
+                    const e=EST[c.estado]||EST.confirmada;
+                    return(
+                      <div key={c.id} style={{background:e.bg,border:`1px solid ${e.col}40`,borderRadius:6,padding:"4px 6px",marginBottom:4}}>
+                        <div style={{color:e.col,fontSize:10,fontWeight:700}}>{c.hora}</div>
+                        <div style={{color:C.texto,fontSize:10,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.cliente}</div>
+                        <div style={{color:C.textoSuave,fontSize:9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.servicio}</div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div style={{color:C.textoSuave,fontSize:12,marginTop:2}}>{c.servicio}</div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0,flexWrap:"wrap"}}>
-                {c.rec==="enviado"?<span style={{fontSize:11,color:C.verde,fontWeight:600}}>Recordatorio OK</span>:<Btn v="gh" sm onClick={()=>set(citas.map(x=>x.id===c.id?{...x,rec:"enviado"}:x))}>Recordar</Btn>}
-                <Bdg color={e.col} bg={e.bg} txt={e.txt}/>
-                <select value={c.estado} onChange={ev=>cambiar(c.id,ev.target.value)} style={{background:C.plomo,color:C.textoSuave,border:`1px solid ${C.borde}`,borderRadius:6,padding:"4px 7px",fontSize:11,cursor:"pointer"}}>
-                  <option value="confirmada">Confirmada</option>
-                  <option value="esperando">Esperando</option>
-                  <option value="en_taller">En taller</option>
-                  <option value="esperando_pieza">Esperando pieza</option>
-                  <option value="completada">Completada</option>
-                </select>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {/* ── VISTA MES ── */}
+      {vista==="mes"&&(()=>{
+        const mesBase=new Date(hoy.getFullYear(),hoy.getMonth()+offset,1);
+        const primerDia=mesBase.getDay()===0?6:mesBase.getDay()-1; // 0=lunes
+        const totalDias=new Date(mesBase.getFullYear(),mesBase.getMonth()+1,0).getDate();
+        const celdas=[];
+        // Celdas vacias antes del primer dia
+        for(let i=0;i<primerDia;i++) celdas.push(null);
+        for(let i=1;i<=totalDias;i++) celdas.push(i);
+
+        return(
+          <div>
+            {/* Cabecera dias semana */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
+              {["Lun","Mar","Mie","Jue","Vie","Sab","Dom"].map(d=>(
+                <div key={d} style={{textAlign:"center",color:C.textoSuave,fontSize:10,fontWeight:600,padding:"4px 0"}}>{d}</div>
+              ))}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+              {celdas.map((dia,i)=>{
+                if(!dia) return <div key={`v${i}`}/>;
+                const clave=`${mesBase.getFullYear()}-${String(mesBase.getMonth()+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+                const citasDia=todasCitas.filter(c=>c.fecha===clave);
+                const esHoy=clave===clavesDia(hoy);
+                return(
+                  <div key={clave} onClick={()=>{setVista("dia");const d=new Date(hoy);const diff2=new Date(clave)-new Date(clavesDia(hoy));setOffset(Math.round(diff2/(1000*60*60*24)));}}
+                    style={{background:esHoy?C.acento+"22":C.carbono,border:`1px solid ${esHoy?C.acento+"60":citasDia.length>0?C.borde+"88":C.borde+"33"}`,borderRadius:8,padding:"6px 4px",minHeight:64,cursor:"pointer",opacity:citasDia.length===0?0.5:1}}>
+                    <div style={{textAlign:"center",marginBottom:4}}>
+                      <span style={{fontSize:12,fontWeight:700,color:esHoy?C.acento:C.texto}}>{dia}</span>
+                    </div>
+                    {citasDia.slice(0,2).map(c=>{
+                      const e=EST[c.estado]||EST.confirmada;
+                      return(
+                        <div key={c.id} style={{background:e.col+"22",borderLeft:`2px solid ${e.col}`,borderRadius:3,padding:"2px 4px",marginBottom:2}}>
+                          <div style={{color:e.col,fontSize:9,fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{c.hora} {c.cliente.split(" ")[0]}</div>
+                        </div>
+                      );
+                    })}
+                    {citasDia.length>2&&<div style={{color:C.textoSuave,fontSize:9,textAlign:"center"}}>+{citasDia.length-2} mas</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL NUEVA CITA */}
+      {dlg&&<Dlg title="Nueva cita" onClose={()=>setDlg(false)} w={420}>
+        <Inp label="Fecha" val={n.fecha} set={v=>setN({...n,fecha:v})} ph="2026-06-27 (AAAA-MM-DD)"/>
+        <TimePicker value={n.hora} onChange={v=>setN({...n,hora:v})}/>
+        <ClienteBuscador
+          value={n.cliente}
+          onChange={v=>setN({...n,cliente:v})}
+          onSeleccionar={cli=>setN(prev=>({...prev,cliente:cli.nombre,tel:cli.tel,vehiculo:"",matricula:"",_vehiculos:cli.vehiculos||[]}))}
+          clientes={clientes||[]}
+        />
+        {/* Si hay vehiculos del cliente, mostrar selector */}
+        {n._vehiculos&&n._vehiculos.length>0&&(
+          <div style={{marginBottom:11}}>
+            <label style={{display:"block",color:C.textoSuave,fontSize:11,fontWeight:600,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Vehiculo</label>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {n._vehiculos.map(v=>{
+                const sel=n.matricula===v.matricula;
+                return(
+                  <div key={v.id} onClick={()=>setN(prev=>({...prev,vehiculo:v.modelo,matricula:v.matricula}))}
+                    style={{background:sel?C.acentoSuave:C.plomo,border:`1px solid ${sel?C.acento:C.borde}`,borderRadius:8,padding:"9px 12px",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{fontSize:18}}>{sel?"🚗":"⬜"}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:sel?700:400,color:sel?C.texto:C.textoSuave,fontSize:13}}>{v.modelo}</div>
+                      <div style={{fontFamily:"monospace",fontSize:11,color:sel?C.acento:C.textoSuave}}>{v.matricula}</div>
+                    </div>
+                    {sel&&<div style={{color:C.acento,fontWeight:700,fontSize:11}}>Seleccionado</div>}
+                  </div>
+                );
+              })}
+              <div onClick={()=>setN(prev=>({...prev,vehiculo:"",matricula:"",_vehiculos:[]}))}
+                style={{background:C.plomo,border:`1px dashed ${C.borde}`,borderRadius:8,padding:"8px 12px",cursor:"pointer",color:C.textoSuave,fontSize:12,textAlign:"center"}}>
+                + Nuevo vehiculo para este cliente
               </div>
             </div>
-          );
-        })}
-      </div>
-      {dlg&&<Dlg title="Nueva cita" onClose={()=>setDlg(false)} w={400}>
-        {[["hora","Hora","09:00"],["cliente","Cliente","Nombre"],["tel","Telefono","6XX XXX XXX"],["vehiculo","Vehiculo","Marca Modelo Anyo"],["matricula","Matricula","0000 XXX"],["servicio","Servicio","Que necesita?"]].map(([k,l,p])=>(<Inp key={k} label={l} val={n[k]} set={v=>setN({...n,[k]:v})} ph={p}/>))}
+          </div>
+        )}
+        {/* Si no hay vehiculos cargados (nuevo cliente o nuevo vehiculo), mostrar campos */}
+        {(!n._vehiculos||n._vehiculos.length===0)&&(
+          <>
+            <Inp label="Vehiculo" val={n.vehiculo} set={v=>setN({...n,vehiculo:v})} ph="Marca Modelo Anyo"/>
+            <Inp label="Matricula" val={n.matricula} set={v=>setN({...n,matricula:v})} ph="0000 XXX"/>
+          </>
+        )}
+        {n.tel&&(
+          <div style={{background:C.verdeClaro,border:`1px solid ${C.verde}40`,borderRadius:8,padding:"7px 12px",marginBottom:11,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:13}}>✓</span>
+            <div style={{fontSize:12,color:C.verde,fontWeight:600}}>Cliente existente</div>
+            <div style={{flex:1,textAlign:"right",color:C.textoSuave,fontSize:11,fontFamily:"monospace"}}>{n.tel}</div>
+          </div>
+        )}
+        {[["tel","Telefono","6XX XXX XXX"],["servicio","Servicio","Que necesita?"]].map(([k,l,p])=>(
+          <Inp key={k} label={l} val={n[k]} set={v=>setN({...n,[k]:v})} ph={p}/>
+        ))}
         <div style={{display:"flex",gap:8,marginTop:6}}>
           <Btn v="gh" onClick={()=>setDlg(false)}>Cancelar</Btn>
-          <Btn onClick={()=>{if(!n.cliente||!n.hora)return;set([...citas,{...n,id:Date.now(),estado:"confirmada",rec:"no_enviado"}]);setN({hora:"",cliente:"",vehiculo:"",matricula:"",servicio:"",tel:""});setDlg(false);}}>Guardar</Btn>
+          <Btn onClick={guardar}>Guardar</Btn>
         </div>
       </Dlg>}
     </div>
@@ -423,63 +828,221 @@ function Comms({comms,setComms}){
 
 // ── CLIENTES ─────────────────────────────────────────────────────────────────
 function Clientes({clientes,setClientes}){
-  const [q,setQ]=useState("");
-  const [open,setOpen]=useState(null);
-  const [valId,setValId]=useState(null);
-  const [stars,setStars]=useState(0);
-  const lista=clientes.filter(c=>c.nombre.toLowerCase().includes(q.toLowerCase())||c.matricula.toLowerCase().includes(q.toLowerCase()));
+  const [q,setQ]          =useState("");
+  const [open,setOpen]    =useState(null); // id cliente abierto en ficha
+  const [valId,setValId]  =useState(null);
+  const [stars,setStars]  =useState(0);
+  const [dlgNuevo,setDlgNuevo]=useState(false);
+  const [nuevoForm,setNuevoForm]=useState({nombre:"",dni:"",tel:"",modelo:"",matricula:""});
+
+  const lista=clientes.filter(c=>
+    c.nombre.toLowerCase().includes(q.toLowerCase())||
+    (c.vehiculos||[]).some(v=>v.matricula.toLowerCase().includes(q.toLowerCase()))||
+    (c.tel||"").includes(q)
+  );
   const det=clientes.find(c=>c.id===open);
-  const revs=det?REVISIONES.filter(r=>r.mat===det.matricula):[];
+  const revsCliente=det?(det.vehiculos||[]).flatMap(v=>REVISIONES.filter(r=>r.mat===v.matricula)):[];
+
+  const guardarNuevo=()=>{
+    if(!nuevoForm.nombre||!nuevoForm.tel)return;
+    const nuevo={
+      id:Date.now(),
+      nombre:nuevoForm.nombre,
+      dni:nuevoForm.dni,
+      tel:nuevoForm.tel,
+      visitas:0,gasto:0,val:null,
+      vehiculos:nuevoForm.modelo?[{id:`v${Date.now()}`,modelo:nuevoForm.modelo,matricula:nuevoForm.matricula}]:[],
+    };
+    setClientes([...clientes,nuevo]);
+    setNuevoForm({nombre:"",dni:"",tel:"",modelo:"",matricula:""});
+    setDlgNuevo(false);
+  };
+
+  const addVehiculo=(cliId)=>{
+    const modelo=prompt("Modelo del vehiculo (ej: Ford Focus 2021):");
+    if(!modelo)return;
+    const mat=prompt("Matricula:");
+    if(!mat)return;
+    setClientes(clientes.map(c=>c.id===cliId?{...c,vehiculos:[...(c.vehiculos||[]),{id:`v${Date.now()}`,modelo,matricula:mat}]}:c));
+  };
+
+  const delVehiculo=(cliId,vId)=>{
+    setClientes(clientes.map(c=>c.id===cliId?{...c,vehiculos:(c.vehiculos||[]).filter(v=>v.id!==vId)}:c));
+  };
+
   return(
     <div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
-        <div style={{fontSize:17,fontWeight:700,color:C.texto}}>Clientes</div>
-        <input placeholder="Buscar nombre o matricula..." value={q} onChange={e=>setQ(e.target.value)} style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:8,padding:"8px 13px",color:C.texto,fontSize:13,width:220}}/>
+      {/* Cabecera */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,gap:8,flexWrap:"wrap"}}>
+        <div style={{fontSize:17,fontWeight:700,color:C.texto}}>Clientes <span style={{color:C.textoSuave,fontSize:13,fontWeight:400}}>({clientes.length})</span></div>
+        <div style={{display:"flex",gap:8}}>
+          <input placeholder="Buscar nombre, matricula o tel..." value={q} onChange={e=>setQ(e.target.value)}
+            style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:8,padding:"8px 13px",color:C.texto,fontSize:13,width:230}}/>
+          <Btn onClick={()=>setDlgNuevo(true)}>+ Nuevo cliente</Btn>
+        </div>
       </div>
+
+      {/* Lista */}
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
-        {lista.map(c=>(
-          <div key={c.id} style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:10,padding:"13px 17px",display:"flex",alignItems:"center",gap:13,flexWrap:"wrap"}}>
-            <div style={{width:38,height:38,borderRadius:"50%",background:C.acentoSuave,border:`1.5px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:15,flexShrink:0}}>{c.nombre[0]}</div>
-            <div style={{flex:1,minWidth:150}}>
-              <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{c.nombre}</div>
-              <div style={{color:C.textoSuave,fontSize:12}}>{c.vehiculo} - {c.matricula}</div>
-              <div style={{color:C.textoSuave,fontSize:11,fontFamily:"monospace"}}>DNI: {c.dni}</div>
-              {c.val&&<div style={{display:"flex",gap:1,marginTop:2}}>{[1,2,3,4,5].map(i=><span key={i} style={{fontSize:12,color:i<=c.val?C.amarillo:C.borde}}>*</span>)}</div>}
+        {lista.map(c=>{
+          const nveh=(c.vehiculos||[]).length;
+          return(
+            <div key={c.id} onClick={()=>setOpen(c.id)}
+              style={{background:C.carbono,border:`1px solid ${C.borde}`,borderRadius:10,padding:"13px 17px",display:"flex",alignItems:"center",gap:13,flexWrap:"wrap",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=C.acento+"55"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=C.borde}>
+              {/* Avatar */}
+              <div style={{width:40,height:40,borderRadius:"50%",background:C.acentoSuave,border:`1.5px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:16,flexShrink:0,position:"relative"}}>
+                {c.nombre[0]}
+                {/* Contador de coches */}
+                {nveh>0&&<div style={{position:"absolute",top:-4,right:-4,background:C.azul,color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:9,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",border:`2px solid ${C.carbono}`}}>{nveh}</div>}
+              </div>
+              {/* Info */}
+              <div style={{flex:1,minWidth:150}}>
+                <div style={{fontWeight:700,color:C.texto,fontSize:14}}>{c.nombre}</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3}}>
+                  {(c.vehiculos||[]).map((v,i)=>(
+                    <span key={i} style={{background:C.plomo,border:`1px solid ${C.borde}`,borderRadius:4,padding:"1px 7px",fontSize:10,color:C.textoSuave,fontFamily:"monospace"}}>{v.matricula}</span>
+                  ))}
+                  {nveh===0&&<span style={{color:C.textoSuave,fontSize:11}}>Sin vehiculos</span>}
+                </div>
+              </div>
+              {/* Stats */}
+              <div style={{display:"flex",gap:16,flexShrink:0}}>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontWeight:800,color:C.azul,fontFamily:"monospace",fontSize:15}}>{nveh}</div>
+                  <div style={{color:C.textoSuave,fontSize:10}}>coches</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontWeight:800,color:C.texto,fontFamily:"monospace"}}>{c.visitas}</div>
+                  <div style={{color:C.textoSuave,fontSize:10}}>visitas</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontWeight:800,color:C.verde,fontFamily:"monospace",fontSize:13}}>{fmtEur(c.gasto)}</div>
+                  <div style={{color:C.textoSuave,fontSize:10}}>gastado</div>
+                </div>
+              </div>
+              {/* Estrellas */}
+              {c.val&&<div style={{display:"flex",gap:1,flexShrink:0}}>{[1,2,3,4,5].map(i=><span key={i} style={{fontSize:13,color:i<=c.val?C.amarillo:C.borde}}>&#9733;</span>)}</div>}
+              <div style={{color:C.textoSuave,fontSize:11,flexShrink:0}}>Ver ficha ›</div>
             </div>
-            <div style={{display:"flex",gap:16,flexShrink:0}}>
-              <div style={{textAlign:"center"}}><div style={{fontWeight:800,color:C.texto,fontFamily:"monospace"}}>{c.visitas}</div><div style={{color:C.textoSuave,fontSize:11}}>visitas</div></div>
-              <div style={{textAlign:"center"}}><div style={{fontWeight:800,color:C.verde,fontFamily:"monospace"}}>{fmtEur(c.gasto)}</div><div style={{color:C.textoSuave,fontSize:11}}>gastado</div></div>
+          );
+        })}
+        {lista.length===0&&<div style={{textAlign:"center",color:C.textoSuave,padding:"40px 0",fontSize:13}}>No hay clientes con esa busqueda</div>}
+      </div>
+
+      {/* ── FICHA COMPLETA ── */}
+      {det&&(
+        <Dlg title="" onClose={()=>setOpen(null)} w={580}>
+          {/* Cabecera ficha */}
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${C.borde}`}}>
+            <div style={{width:56,height:56,borderRadius:"50%",background:C.acentoSuave,border:`2px solid ${C.acento}40`,display:"flex",alignItems:"center",justifyContent:"center",color:C.acento,fontWeight:800,fontSize:22,flexShrink:0}}>
+              {det.nombre[0]}
             </div>
-            <div style={{display:"flex",gap:6,flexShrink:0}}>
-              <Btn v="gh" sm onClick={()=>setOpen(c.id)}>Historial</Btn>
-              <Btn v="yw" sm onClick={()=>{setValId(c.id);setStars(c.val||0);}}>Valorar</Btn>
-              <a href={`tel:${c.tel}`} style={{background:C.verdeClaro,border:`1px solid ${C.verde}40`,color:C.verde,borderRadius:7,padding:"4px 9px",fontSize:11,fontWeight:700,textDecoration:"none"}}>Llamar</a>
+            <div style={{flex:1}}>
+              <div style={{fontSize:18,fontWeight:800,color:C.texto}}>{det.nombre}</div>
+              <div style={{display:"flex",gap:12,marginTop:4,flexWrap:"wrap"}}>
+                <span style={{color:C.textoSuave,fontSize:12}}>📞 {det.tel}</span>
+                {det.dni&&<span style={{color:C.textoSuave,fontSize:12,fontFamily:"monospace"}}>DNI: {det.dni}</span>}
+              </div>
+              {det.val&&<div style={{display:"flex",gap:2,marginTop:4}}>{[1,2,3,4,5].map(i=><span key={i} style={{fontSize:16,color:i<=det.val?C.amarillo:C.borde}}>&#9733;</span>)}</div>}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn v="yw" sm onClick={e=>{e.stopPropagation();setValId(det.id);setStars(det.val||0);}}>Valorar</Btn>
+              <a href={`tel:${det.tel}`} onClick={e=>e.stopPropagation()} style={{background:C.verdeClaro,border:`1px solid ${C.verde}40`,color:C.verde,borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700,textDecoration:"none"}}>Llamar</a>
             </div>
           </div>
-        ))}
-      </div>
-      {det&&<Dlg title={`Historial - ${det.nombre}`} onClose={()=>setOpen(null)} w={540}>
-        <div style={{display:"flex",gap:14,marginBottom:12,flexWrap:"wrap"}}>
-          <div style={{flex:1}}><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Vehiculo</div><div style={{color:C.texto,fontWeight:700}}>{det.vehiculo} - {det.matricula}</div></div>
-          <div><div style={{color:C.textoSuave,fontSize:11,fontWeight:600,textTransform:"uppercase"}}>Total gastado</div><div style={{color:C.verde,fontWeight:800,fontSize:17,fontFamily:"monospace"}}>{fmtEur(det.gasto)}</div></div>
-        </div>
-        {revs.length>0&&(()=>{const prox=revs[0].km+10000;return(<div style={{background:C.azulClaro,border:`1px solid ${C.azul}40`,borderRadius:8,padding:"10px 13px",marginBottom:13,display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:16}}>Recordatorio</span><div style={{flex:1}}><div style={{color:C.azul,fontWeight:700,fontSize:13}}>Proxima revision recomendada</div><div style={{color:C.texto,fontSize:12}}>Cambio aceite recomendado ~{prox.toLocaleString()} km</div></div><Btn v="bl" sm>Agendar</Btn></div>);})()}
-        <Hr label="Revisiones anteriores"/>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {revs.length===0&&<div style={{color:C.textoSuave,fontSize:13,textAlign:"center",padding:"18px 0"}}>Sin revisiones registradas</div>}
-          {revs.map((r,i)=>(<div key={i} style={{background:C.plomo,borderRadius:8,padding:"9px 13px",display:"flex",alignItems:"center",gap:12}}><div style={{flex:1}}><div style={{color:C.texto,fontSize:13,fontWeight:600}}>{r.srv}</div><div style={{color:C.textoSuave,fontSize:11,marginTop:2}}>{r.fecha} - {r.km.toLocaleString()} km - {r.mec}</div></div><div style={{color:C.verde,fontFamily:"monospace",fontWeight:700}}>{fmtEur(r.imp)}</div></div>))}
-        </div>
-      </Dlg>}
-      {valId&&<Dlg title="Registrar valoracion" onClose={()=>setValId(null)} w={360}>
-        <div style={{textAlign:"center",marginBottom:14}}>
-          <div style={{color:C.textoSuave,fontSize:13,marginBottom:10}}>Puntuacion del cliente</div>
-          <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(i=><span key={i} onClick={()=>setStars(i)} style={{fontSize:30,cursor:"pointer",color:i<=stars?C.amarillo:C.borde}}>*</span>)}</div>
-        </div>
-        <div style={{display:"flex",gap:8,marginTop:6}}>
-          <Btn v="gh" onClick={()=>setValId(null)}>Cancelar</Btn>
-          <Btn onClick={()=>{setClientes(clientes.map(c=>c.id===valId?{...c,val:stars}:c));setValId(null);}}>Guardar</Btn>
-        </div>
-      </Dlg>}
+
+          {/* KPIs */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:18}}>
+            {[
+              {val:(det.vehiculos||[]).length,label:"Vehiculos",color:C.azul},
+              {val:det.visitas,label:"Visitas",color:C.texto},
+              {val:fmtEur(det.gasto),label:"Total gastado",color:C.verde},
+            ].map((k,i)=>(
+              <div key={i} style={{background:C.plomo,borderRadius:9,padding:"12px 14px",textAlign:"center"}}>
+                <div style={{fontFamily:"monospace",fontWeight:800,fontSize:17,color:k.color}}>{k.val}</div>
+                <div style={{color:C.textoSuave,fontSize:11,marginTop:2}}>{k.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Vehiculos */}
+          <Hr label="Vehiculos"/>
+          <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:4}}>
+            {(det.vehiculos||[]).map(v=>{
+              const revsV=REVISIONES.filter(r=>r.mat===v.matricula);
+              return(
+                <div key={v.id} style={{background:C.plomo,borderRadius:9,padding:"11px 14px",display:"flex",alignItems:"center",gap:12}}>
+                  <span style={{fontSize:20}}>🚗</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,color:C.texto,fontSize:13}}>{v.modelo}</div>
+                    <div style={{fontFamily:"monospace",fontSize:11,color:C.acento,marginTop:1}}>{v.matricula}</div>
+                    <div style={{color:C.textoSuave,fontSize:11,marginTop:1}}>{revsV.length} revision{revsV.length!==1?"es":""} registradas</div>
+                  </div>
+                  <button onClick={()=>delVehiculo(det.id,v.id)}
+                    style={{background:"none",border:`1px solid ${C.rojo}40`,color:C.rojo,borderRadius:6,padding:"4px 8px",fontSize:11,cursor:"pointer"}}>
+                    Quitar
+                  </button>
+                </div>
+              );
+            })}
+            <button onClick={()=>addVehiculo(det.id)}
+              style={{background:"none",border:`1px dashed ${C.borde}`,borderRadius:8,padding:"9px",color:C.textoSuave,fontSize:12,cursor:"pointer",textAlign:"center"}}>
+              + Anadir vehiculo
+            </button>
+          </div>
+
+          {/* Revisiones */}
+          {revsCliente.length>0&&(
+            <>
+              <Hr label="Historial de revisiones"/>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {revsCliente.map((r,i)=>(
+                  <div key={i} style={{background:C.plomo,borderRadius:8,padding:"9px 13px",display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{color:C.texto,fontSize:12,fontWeight:600}}>{r.srv}</div>
+                      <div style={{color:C.textoSuave,fontSize:11,marginTop:2}}>{r.fecha} · {r.km.toLocaleString()} km · {r.mec} · <span style={{fontFamily:"monospace"}}>{r.mat}</span></div>
+                    </div>
+                    <div style={{color:C.verde,fontFamily:"monospace",fontWeight:700,fontSize:13}}>{fmtEur(r.imp)}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {revsCliente.length===0&&<div style={{color:C.textoSuave,fontSize:12,textAlign:"center",padding:"16px 0"}}>Sin revisiones registradas</div>}
+        </Dlg>
+      )}
+
+      {/* ── MODAL NUEVO CLIENTE ── */}
+      {dlgNuevo&&(
+        <Dlg title="Nuevo cliente" onClose={()=>setDlgNuevo(false)} w={420}>
+          <Inp label="Nombre completo" val={nuevoForm.nombre} set={v=>setNuevoForm({...nuevoForm,nombre:v})} ph="Nombre y apellidos"/>
+          <Inp label="Telefono" val={nuevoForm.tel} set={v=>setNuevoForm({...nuevoForm,tel:v})} ph="6XX XXX XXX"/>
+          <Inp label="DNI / NIE (opcional)" val={nuevoForm.dni} set={v=>setNuevoForm({...nuevoForm,dni:v})} ph="12345678A"/>
+          <Hr label="Vehiculo (opcional)"/>
+          <Inp label="Modelo" val={nuevoForm.modelo} set={v=>setNuevoForm({...nuevoForm,modelo:v})} ph="Marca Modelo Anyo"/>
+          <Inp label="Matricula" val={nuevoForm.matricula} set={v=>setNuevoForm({...nuevoForm,matricula:v})} ph="0000 XXX"/>
+          <div style={{display:"flex",gap:8,marginTop:8}}>
+            <Btn v="gh" onClick={()=>setDlgNuevo(false)}>Cancelar</Btn>
+            <Btn onClick={guardarNuevo}>Guardar cliente</Btn>
+          </div>
+        </Dlg>
+      )}
+
+      {/* ── MODAL VALORACION ── */}
+      {valId&&(
+        <Dlg title="Registrar valoracion" onClose={()=>setValId(null)} w={360}>
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <div style={{color:C.textoSuave,fontSize:13,marginBottom:10}}>Puntuacion del cliente</div>
+            <div style={{display:"flex",justifyContent:"center",gap:6}}>{[1,2,3,4,5].map(i=><span key={i} onClick={()=>setStars(i)} style={{fontSize:30,cursor:"pointer",color:i<=stars?C.amarillo:C.borde}}>&#9733;</span>)}</div>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:6}}>
+            <Btn v="gh" onClick={()=>setValId(null)}>Cancelar</Btn>
+            <Btn onClick={()=>{setClientes(clientes.map(c=>c.id===valId?{...c,val:stars}:c));setValId(null);}}>Guardar</Btn>
+          </div>
+        </Dlg>
+      )}
     </div>
   );
 }
@@ -1152,7 +1715,7 @@ export default function App(){
           </div>
         )}
         {fbReady&&tab==="portal"         &&<PortalCliente    citas={citas} clientes={clts}/>}
-        {fbReady&&tab==="agenda"         &&<Agenda           citas={citas} set={setCitasFb}/>}
+        {fbReady&&tab==="agenda"         &&<Agenda           citas={citas} set={setCitasFb} clientes={clts}/>}
         {fbReady&&tab==="comunicaciones" &&<Comms            comms={comms} setComms={setCommsFb}/>}
         {fbReady&&tab==="albaranes"      &&<Albaranes        albs={albs}   setAlbs={setAlbsFb}  setFacts={setFactsFb} setTab={setTab}/>}
         {fbReady&&tab==="facturas"       &&<Facturas         facts={facts} setFacts={setFactsFb}/>}
